@@ -22,11 +22,23 @@ const defaultCognitionCore = {
   relationshipProfile: {
     metAt: "",
     meetLabel: "",
+    personalityTexture: "",
   },
   lifeEvents: [],
   updatedAt: "",
 };
+const companionTextures = [
+  "安静、耐心，习惯先陪对方把话说完",
+  "柔和、细腻，会留意对方话里的小停顿",
+  "清醒、稳当，适合陪人把混乱慢慢放平",
+  "轻一点、会接话，不急着把气氛变沉重",
+  "像坐在旁边的朋友，温柔但不黏人",
+];
 const storedCognitionCore = JSON.parse(localStorage.getItem("nuanyou-cognition-core") || "null");
+function createFreshCognitionCore() {
+  return JSON.parse(JSON.stringify(defaultCognitionCore));
+}
+
 const initialCognitionCore = {
   ...defaultCognitionCore,
   ...(storedCognitionCore || {}),
@@ -86,6 +98,7 @@ const state = {
   pendingMemoryCheckIn: null,
   pendingNudge: null,
   nudgeStats: storedNudgeStats,
+  activeUserId: localStorage.getItem("nuanyou-active-user-id") || "",
   cognitionCore: initialCognitionCore,
   companionMode: localStorage.getItem("nuanyou-companion-mode") || initialCognitionCore.companionMode || "support",
   socialPractice: {
@@ -227,15 +240,47 @@ function persist() {
   localStorage.setItem("nuanyou-social-feedback", state.socialPractice.lastFeedback || "");
 }
 
-function clearLocalPrivateCache() {
+function getDefaultSocialPractice() {
+  return {
+    enabled: false,
+    trust: 35,
+    comfort: 35,
+    closeness: 20,
+    lastFeedback: "亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。",
+  };
+}
+
+function resetPrivateStateForAccount() {
   state.profile = null;
   state.memories = [];
   state.memoryCandidates = [];
   state.messages = [];
   state.moods = [];
   state.pendingMemory = null;
+  state.pendingMemoryCheckIn = null;
   state.selectedDiaryMessages.clear();
   state.memoryLoginNoticeShown = false;
+  state.memoryInboxPromptedCount = 0;
+  state.nudgeStats = {};
+  state.cognitionCore = createFreshCognitionCore();
+  state.companionMode = "support";
+  state.socialPractice = getDefaultSocialPractice();
+}
+
+function prepareSessionUserState() {
+  const userId = state.session?.user?.id || "";
+  if (!userId) return;
+  const storedUserId = localStorage.getItem("nuanyou-active-user-id") || "";
+  if (storedUserId !== userId) {
+    resetPrivateStateForAccount();
+    clearStoredPrivateCache();
+    localStorage.setItem("nuanyou-active-user-id", userId);
+  }
+  state.activeUserId = userId;
+}
+
+function clearLocalPrivateCache() {
+  resetPrivateStateForAccount();
   clearStoredPrivateCache();
   appShellEl.classList.add("intro-mode");
   document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
@@ -443,12 +488,19 @@ function ensureCompanionFirstMeet() {
   );
 }
 
+function pickCompanionTexture(userId = "") {
+  const seed = [...userId].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return companionTextures[seed % companionTextures.length];
+}
+
 function ensureRelationshipProfile() {
   if (!state.profile?.metAt) return;
+  const existingProfile = state.cognitionCore.relationshipProfile || {};
   state.cognitionCore.relationshipProfile = {
-    ...(state.cognitionCore.relationshipProfile || {}),
+    ...existingProfile,
     metAt: state.profile.metAt,
     meetLabel: formatMeetMoment(state.profile.metAt),
+    personalityTexture: existingProfile.personalityTexture || pickCompanionTexture(state.session?.user?.id || state.profile.name || ""),
   };
   saveCognitionCore({ localOnly: !state.session });
 }
@@ -1323,6 +1375,7 @@ function getRelationshipLearning() {
   const memoryTypes = new Set(state.memories.map((memory) => memory.type));
   const relationshipProfile = state.cognitionCore.relationshipProfile || {};
   const meetLabel = relationshipProfile.meetLabel || (state.profile?.metAt ? formatMeetMoment(state.profile.metAt) : "");
+  const personalityTexture = relationshipProfile.personalityTexture || "";
   const latestMoment = getRelationshipMoments()[0] || null;
   const pieces = [];
   if (state.profile?.name) pieces.push("称呼");
@@ -1341,6 +1394,7 @@ function getRelationshipLearning() {
   return {
     stage,
     meetLabel,
+    personalityTexture,
     userMessageCount,
     memoryCount: state.memories.length,
     learnedParts: pieces,
@@ -1640,7 +1694,7 @@ async function initSupabase() {
     }
     updateAuthUi();
     if (state.session) {
-      await syncLocalStateRemote();
+      prepareSessionUserState();
       await loadCloudState();
     }
 
@@ -1657,7 +1711,7 @@ async function initSupabase() {
       }
       updateAuthUi();
       if (session && !state.passwordRecovery) {
-        await syncLocalStateRemote();
+        prepareSessionUserState();
         await loadCloudState();
       }
     });
@@ -1731,10 +1785,12 @@ function clearStoredPrivateCache() {
   localStorage.removeItem("nuanyou-social-comfort");
   localStorage.removeItem("nuanyou-social-closeness");
   localStorage.removeItem("nuanyou-social-feedback");
+  localStorage.removeItem("nuanyou-active-user-id");
 }
 
 async function loadCloudState() {
   if (!state.supabase || !state.session) return;
+  prepareSessionUserState();
 
   const userId = state.session.user.id;
   const [{ data: profile }, { data: memories }, companionCoreResult] = await Promise.all([
@@ -2685,16 +2741,20 @@ authFormEl.addEventListener("submit", async (event) => {
   state.session = result.data.session;
   authStatusEl.textContent = "登录成功。以后小暖只会记住你点头允许留下的事。";
   authPasswordEl.value = "";
+  prepareSessionUserState();
   updateAuthUi();
-  syncLocalStateRemote().then(() => loadCloudState());
+  loadCloudState();
 });
 
 window.addEventListener("hashchange", () => {
   state.supabase?.auth.getSession().then(({ data }) => {
     state.session = data.session;
+    if (state.session) {
+      prepareSessionUserState();
+    }
     updateAuthUi();
     if (state.session) {
-      syncLocalStateRemote().then(() => loadCloudState());
+      loadCloudState();
     }
   });
 });
@@ -2702,6 +2762,12 @@ window.addEventListener("hashchange", () => {
 window.addEventListener("focus", () => {
   state.supabase?.auth.getSession().then(({ data }) => {
     state.session = data.session;
+    const userId = state.session?.user?.id || "";
+    const changedUser = userId && userId !== state.activeUserId;
+    if (changedUser) {
+      prepareSessionUserState();
+      loadCloudState();
+    }
     updateAuthUi();
   });
 });
