@@ -31,12 +31,40 @@ QWEN_MODEL=qwen-turbo
 SUPABASE_URL=https://fcmcbolicactqtibbdcj.supabase.co
 SUPABASE_ANON_KEY=你的 Supabase publishable / anon key
 SUPABASE_SERVICE_ROLE_KEY=你的 Supabase service role key
+
+# 可选：产品外壳
+PUBLIC_PRODUCT_VARIANT=domestic
 ```
 
 注意：
 
 - `DASHSCOPE_API_KEY` 和 `SUPABASE_SERVICE_ROLE_KEY` 只能放在 Vercel 环境变量里，不能写进前端代码。
 - 改完环境变量后，需要重新部署一次 Vercel。
+- `PUBLIC_PRODUCT_VARIANT` 默认是 `domestic`，也就是国内版“暖友 / 小暖”：有边界、有记忆、有成长的亲密陪伴。
+- 如果未来拆海外站，可以在海外 Vercel 项目里设成 `overseas`，前端会切到更直接的 AI companion 包装，后端提示词也会走更接近 AI girlfriend / boyfriend 的定位。
+
+## 产品双版本路线
+
+当前代码按“一套核心，两套外壳”设计：
+
+- 国内版：`domestic`
+  - 品牌：暖友 / 小暖。
+  - 模式：倾诉、社交、心动。
+  - 重点：情绪陪伴、授权记忆、关系成长、隐私边界、长期可信。
+  - 心动模式也保持边界，不做露骨成人内容，不制造危险依赖。
+- 海外版：`overseas`
+  - 品牌外壳可以独立域名、独立 UI、独立条款。
+  - 模式文案会更直接偏 AI girlfriend / boyfriend / romantic companion。
+  - 后续可扩展角色选择、订阅、点数、图片、语音、剧情等商业化模块。
+
+两版共用底层能力：
+
+- Supabase 账号系统。
+- 每个账号独立的 `profiles`、`memory_cards`、`companion_cores`。
+- 用户授权记忆。
+- 小暖/伴侣人格核心。
+- 关系档案和关系小瞬间。
+- 千问模型网关。
 
 ## Supabase 登录设置
 

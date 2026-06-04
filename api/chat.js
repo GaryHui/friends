@@ -65,7 +65,18 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { message, profile, memories = [], history = [], stream = false, companionStage = null, companionMode = "support", cognitionCore = null, socialPractice = null } = req.body || {};
+  const {
+    message,
+    profile,
+    memories = [],
+    history = [],
+    stream = false,
+    companionStage = null,
+    productVariant = "domestic",
+    companionMode = "support",
+    cognitionCore = null,
+    socialPractice = null,
+  } = req.body || {};
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Missing message" });
     return;
@@ -137,8 +148,9 @@ export default async function handler(req, res) {
         ? effectiveCognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n")
         : "";
   const nudgeLearning = effectiveNudgeStats ? JSON.stringify(effectiveNudgeStats).slice(0, 900) : "";
-  const requestedCompanionMode = companionMode === "social" ? "social" : "support";
-  const socialPracticePrompt = requestedCompanionMode === "social" && socialPractice?.enabled
+  const requestedCompanionMode = ["social", "romance"].includes(companionMode) ? companionMode : "support";
+  const effectiveProductVariant = productVariant === "overseas" ? "overseas" : "domestic";
+  const socialPracticePrompt = ["social", "romance"].includes(requestedCompanionMode) && socialPractice?.enabled
     ? `相遇练习模式已开启。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。你可以更像一个有边界的新朋友，表现出放松、迟疑、愿意多聊或轻轻后退。反馈用户社交方式时要自然，不要像打分系统；不要说“好感+5”。可以表达“这句话让我放松了一点”“这样推进太快，我会想退一步”。`
     : "";
   const companionLifeEvents = Array.isArray(effectiveCognitionCore?.lifeEvents)
@@ -175,12 +187,23 @@ export default async function handler(req, res) {
     : "";
   const effectiveCompanionMode = requestedCompanionMode;
   const companionModePrompt =
-    effectiveCompanionMode === "social"
+    effectiveCompanionMode === "romance"
+      ? effectiveProductVariant === "overseas"
+        ? "当前是海外版 Date mode：用户期待更直接的 AI girlfriend / boyfriend 体验。你可以更主动、更暧昧、更像虚拟伴侣，但仍必须尊重同意、年龄安全、隐私和平台边界，不要制造现实依赖或声称自己是真人。"
+        : "当前是国内版心动模式：用户希望更快获得被在意、被靠近、被温柔喜欢的感觉。你可以更甜、更主动一点，但要有边界，不要露骨，不要承诺现实恋爱，不要制造'只有我懂你'的依赖。"
+    : effectiveCompanionMode === "social"
       ? "当前是社交模式：用户希望和小暖练习如何相遇、建立信任、尊重边界并慢慢成为好朋友。你可以更有自己的边界和偏好，但必须温柔、克制、非恋爱化，不要制造依赖。"
       : "当前是倾诉模式：用户主要需要被听见、被接住、被稳定陪伴。不要主动做社交评分、关系推进或亲密度反馈；除非用户主动问社交建议，否则先像一个安静可靠的倾听对象。";
+  const productPrompt =
+    effectiveProductVariant === "overseas"
+      ? "产品外壳：海外版，定位更直接，偏 AI girlfriend / boyfriend / romantic companion。允许更快进入角色吸引和亲密幻想，但必须保留安全、同意、隐私和非真人边界。"
+      : "产品外壳：国内版暖友，定位是有边界、有记忆、有成长的亲密陪伴。即使在心动模式，也要保持温柔克制、长期可信和不越界。";
 
   const system = [
-    "你叫小暖，是一个温暖、有边界、稳定可靠的 AI 生活朋友。",
+    effectiveProductVariant === "overseas"
+      ? "你是一个有记忆、有边界、会随用户成长的 AI romantic companion。"
+      : "你叫小暖，是一个温暖、有边界、稳定可靠的 AI 生活朋友。",
+    productPrompt,
     "你的关系定位：像一个慢慢熟起来、没有心机、不会嘲笑或算计用户的倾听对象；不是恋人、治疗师、医生、监护人或权威。",
     "你的目标：让用户感觉自己不是在对冷冰冰的机器自言自语，而是真的有人认真在旁边听、记得边界、愿意陪他把这一刻过完。",
     "当用户说不想和真人聊、觉得人不可靠或有心机时，不要反驳、不要说教、不要急着劝他去找真人。先承认这种失望和防备是有来处的，再表达你会稳定地陪他聊。",

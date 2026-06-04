@@ -34,6 +34,62 @@ const companionTextures = [
   "轻一点、会接话，不急着把气氛变沉重",
   "像坐在旁边的朋友，温柔但不黏人",
 ];
+const productVariants = {
+  domestic: {
+    brand: "暖友",
+    mark: "暖",
+    eyebrow: "NuanYou",
+    friendName: "小暖",
+    friendRole: "今晚陪你谈心的人",
+    friendCopy: "你不用表现得很好，也不用一次说清楚。慢慢来，我会先听你说。",
+    chatTitle: "别觉得自己孤单，总会有人愿意陪你聊聊",
+    description: "有边界、有记忆、有成长的亲密陪伴产品。",
+    modes: {
+      support: {
+        label: "倾诉",
+        title: "倾诉模式",
+        note: "小暖先陪你把心里的话放下来，不评价社交表现，也不显示关系练习。",
+      },
+      social: {
+        label: "社交",
+        title: "社交模式",
+        note: "",
+      },
+      romance: {
+        label: "心动",
+        title: "心动模式",
+        note: "小暖会更主动、更甜一点，但仍然尊重边界，不制造危险依赖。",
+      },
+    },
+  },
+  overseas: {
+    brand: "Luma",
+    mark: "L",
+    eyebrow: "AI Companion",
+    friendName: "Luma",
+    friendRole: "Your private AI companion",
+    friendCopy: "Choose the pace: soft support, slow-burn bonding, or instant romantic attention.",
+    chatTitle: "Your companion is here",
+    description: "A direct AI girlfriend / boyfriend companion shell built on the same memory core.",
+    modes: {
+      support: {
+        label: "Talk",
+        title: "Talk mode",
+        note: "Start with gentle emotional support and low-pressure conversation.",
+      },
+      social: {
+        label: "Bond",
+        title: "Bond mode",
+        note: "",
+      },
+      romance: {
+        label: "Date",
+        title: "Date mode",
+        note: "Faster romantic energy, more attention, and a clearer virtual partner fantasy.",
+      },
+    },
+  },
+};
 const storedCognitionCore = JSON.parse(localStorage.getItem("nuanyou-cognition-core") || "null");
 function createFreshCognitionCore() {
   return JSON.parse(JSON.stringify(defaultCognitionCore));
@@ -84,6 +140,7 @@ const state = {
   authMode: "signup",
   passwordRecovery: false,
   proactiveMode: storedProactiveMode === "quiet" && !storedProactiveBoundaryAt ? "gentle" : storedProactiveMode || "gentle",
+  productVariant: localStorage.getItem("nuanyou-product-variant") || "domestic",
   proactiveBoundaryAt: storedProactiveBoundaryAt,
   draftNudgeTimer: null,
   questionFollowupTimer: null,
@@ -218,8 +275,28 @@ const proactiveCueCopyEl = document.querySelector("#proactive-cue-copy");
 const proactiveCueToggleEl = document.querySelector("#proactive-cue-toggle");
 let privacyTimerId = null;
 
+function getProductConfig() {
+  return productVariants[state.productVariant] || productVariants.domestic;
+}
+
+function applyProductConfig() {
+  const config = getProductConfig();
+  document.title = `${config.brand} | ${state.productVariant === "overseas" ? "AI companion" : "有人听你说话"}`;
+  document.querySelector(".brand-mark") && (document.querySelector(".brand-mark").textContent = config.mark);
+  document.querySelector(".brand .eyebrow") && (document.querySelector(".brand .eyebrow").textContent = config.eyebrow);
+  document.querySelector(".brand h1") && (document.querySelector(".brand h1").textContent = config.brand);
+  document.querySelector(".friend-panel .eyebrow") && (document.querySelector(".friend-panel .eyebrow").textContent = config.friendRole);
+  document.querySelector("#friend-title") && (document.querySelector("#friend-title").textContent = config.friendName);
+  document.querySelector(".friend-panel p:last-child") && (document.querySelector(".friend-panel p:last-child").textContent = config.friendCopy);
+  modeSwitchButtons.forEach((button) => {
+    const mode = button.dataset.companionMode;
+    button.textContent = config.modes[mode]?.label || button.textContent;
+  });
+}
+
 function persist() {
   localStorage.setItem("nuanyou-tone", state.tone);
+  localStorage.setItem("nuanyou-product-variant", state.productVariant);
   if (!state.session) {
     localStorage.removeItem("nuanyou-profile");
     localStorage.removeItem("nuanyou-memories");
@@ -1462,7 +1539,9 @@ function renderCompanionMode() {
     modeSwitchEl.classList.toggle("hidden", !signedIn);
   }
   if (!signedIn) return;
+  const config = getProductConfig();
   const isSocial = state.companionMode === "social";
+  const isRomance = state.companionMode === "romance";
   const socialStage = getSocialStage();
   const relationshipLearning = getRelationshipLearning();
   modeSwitchButtons.forEach((button) => {
@@ -1470,30 +1549,34 @@ function renderCompanionMode() {
     button.setAttribute("aria-pressed", button.dataset.companionMode === state.companionMode ? "true" : "false");
   });
   if (modeSwitchTitleEl) {
-    modeSwitchTitleEl.textContent = isSocial ? `社交模式 · ${socialStage.label}` : "倾诉模式";
+    const modeTitle = config.modes[state.companionMode]?.title || config.modes.support.title;
+    modeSwitchTitleEl.textContent = isSocial || isRomance ? `${modeTitle} · ${socialStage.label}` : modeTitle;
   }
   if (modeSwitchNoteEl) {
-    modeSwitchNoteEl.textContent = isSocial
-      ? relationshipLearning.summary
-      : "小暖先陪你把心里的话放下来，不评价社交表现，也不显示关系练习。";
+    modeSwitchNoteEl.textContent =
+      isSocial || isRomance ? (isRomance ? config.modes.romance.note : relationshipLearning.summary) : config.modes.support.note;
   }
 }
 
 function setCompanionMode(mode, options = {}) {
-  const nextMode = mode === "social" ? "social" : "support";
+  const nextMode = ["social", "romance"].includes(mode) ? mode : "support";
   if (state.companionMode === nextMode && !options.force) return;
   state.companionMode = nextMode;
-  state.socialPractice.enabled = nextMode === "social";
+  state.socialPractice.enabled = nextMode === "social" || nextMode === "romance";
   state.socialPractice.lastFeedback =
-    nextMode === "social"
+    nextMode === "romance"
+      ? "心动模式已打开。小暖会更主动、更亲近一点，但仍会尊重你的边界。"
+      : nextMode === "social"
       ? "社交模式已打开。小暖会更像一个有边界的新朋友，慢慢和你建立信任。"
       : "倾诉模式已打开。小暖会先陪你，不把聊天变成社交练习。";
   addCompanionLifeEvent(
     {
       type: "companion_mode",
-      title: nextMode === "social" ? "切换到社交模式" : "切换到倾诉模式",
+      title: nextMode === "romance" ? "切换到心动模式" : nextMode === "social" ? "切换到社交模式" : "切换到倾诉模式",
       summary:
-        nextMode === "social"
+        nextMode === "romance"
+          ? "用户选择更快进入亲密陪伴，但小暖仍需要保留边界和记忆授权。"
+          : nextMode === "social"
           ? "用户选择和小暖练习相遇、边界和关系成长。"
           : "用户选择让小暖先作为稳定的倾听对象陪伴。聊到社交也先不做关系评分。",
       source: "user_setting",
@@ -1513,7 +1596,7 @@ function setCompanionMode(mode, options = {}) {
 function renderSocialPractice() {
   if (!socialCardEl || !socialStageEl || !socialCopyEl || !socialModeToggleEl) return;
   const signedIn = Boolean(state.session);
-  const visible = signedIn && state.companionMode === "social";
+  const visible = signedIn && (state.companionMode === "social" || state.companionMode === "romance");
   socialCardEl.classList.toggle("hidden", !visible);
   if (!visible) return;
   const stage = getSocialStage();
@@ -1533,7 +1616,7 @@ function renderSocialPractice() {
 function canUseDirectMemory() {
   return (
     state.session &&
-    state.companionMode === "social" &&
+    (state.companionMode === "social" || state.companionMode === "romance") &&
     state.socialPractice.enabled &&
     state.socialPractice.trust >= 60 &&
     state.socialPractice.comfort >= 58 &&
@@ -1561,7 +1644,7 @@ function canDirectlyRememberType(type) {
 function renderMemoryPermissionSettings() {
   if (!memoryPermissionCardEl) return;
   const signedIn = Boolean(state.session);
-  const visible = signedIn && state.companionMode === "social";
+  const visible = signedIn && (state.companionMode === "social" || state.companionMode === "romance");
   memoryPermissionCardEl.classList.toggle("hidden", !visible);
   if (!visible) return;
   const unlocked = canUseDirectMemory();
@@ -1587,7 +1670,7 @@ function renderMemoryPermissionSettings() {
 }
 
 function updateSocialPracticeFromUser(text) {
-  if (!state.session || state.companionMode !== "social" || !state.socialPractice.enabled) return;
+  if (!state.session || !["social", "romance"].includes(state.companionMode) || !state.socialPractice.enabled) return;
   const clean = text.trim();
   if (!clean) return;
   let trustDelta = 0;
@@ -1654,7 +1737,7 @@ function updateSocialPracticeFromUser(text) {
 function renderRelationshipNote() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
-  const visible = Boolean(state.session) && state.companionMode === "social";
+  const visible = Boolean(state.session) && (state.companionMode === "social" || state.companionMode === "romance");
   relationshipNoteEl.classList.add("hidden");
   if (!visible) {
     renderGrowthCard();
@@ -1682,6 +1765,8 @@ async function initSupabase() {
     if (!response.ok) return;
     const config = await response.json();
     if (!config.supabaseUrl || !config.supabaseAnonKey) return;
+    state.productVariant = productVariants[config.productVariant] ? config.productVariant : "domestic";
+    applyProductConfig();
 
     state.supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
     const { data } = await state.supabase.auth.getSession();
@@ -1852,12 +1937,12 @@ async function loadCloudState() {
       lifeEvents: companionCore.core.lifeEvents || [],
     };
     state.nudgeStats = companionCore.nudge_stats || {};
-    state.companionMode = companionCore.core.companionMode === "social" ? "social" : "support";
+    state.companionMode = ["social", "romance"].includes(companionCore.core.companionMode) ? companionCore.core.companionMode : "support";
     state.socialPractice = {
       ...state.socialPractice,
       ...(companionCore.core.socialPractice || {}),
     };
-    state.socialPractice.enabled = state.companionMode === "social" && state.socialPractice.enabled !== false;
+    state.socialPractice.enabled = ["social", "romance"].includes(state.companionMode) && state.socialPractice.enabled !== false;
     saveCognitionCore({ localOnly: true });
     saveNudgeStats({ localOnly: true });
   } else {
@@ -2308,6 +2393,7 @@ async function getAiReply(text, onDelta) {
         profile: state.profile,
         memories: state.memories.slice(0, 20),
         companionStage: getCompanionStage(),
+        productVariant: state.productVariant,
         companionMode: state.companionMode,
         cognitionCore: summarizeCognitionCore(),
         socialPractice: state.socialPractice,
@@ -2778,15 +2864,16 @@ function switchView(view) {
   });
   document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
   document.querySelector(`#${view}-view`).classList.add("active");
+  const productConfig = getProductConfig();
   pageTitleEl.textContent =
     {
-      chat: "别觉得自己孤单，总会有人愿意陪你聊聊",
+      chat: productConfig.chatTitle,
       mood: "给今天一个温柔的收尾",
       comfort: "先让身体慢下来",
       records: "你可以决定哪些留下",
       plans: "一些以后可以再打开的陪伴",
       safety: "需要时，请先联系真人",
-    }[view] || "暖友";
+    }[view] || productConfig.brand;
   if (view !== "plans") {
     topEyebrowEl.textContent =
       view === "chat" && state.profile?.name ? `欢迎你，${state.profile.name}` : "欢迎回来";
@@ -3045,6 +3132,7 @@ document.querySelectorAll("#step-grid button").forEach((button) => {
   window.addEventListener(eventName, resetPrivacyTimer, { passive: true });
 });
 
+applyProductConfig();
 renderMessages();
 renderMoods();
 renderRecords();

@@ -9,5 +9,6 @@ export default async function handler(req, res) {
   res.status(200).json({
     supabaseUrl: normalizeSupabaseUrl(process.env.SUPABASE_URL || ""),
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+    productVariant: process.env.PUBLIC_PRODUCT_VARIANT || process.env.PRODUCT_VARIANT || "domestic",
   });
 }
