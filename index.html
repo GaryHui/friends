@@ -202,6 +202,17 @@
                 <span>小暖只会记下你点头允许的事。为了回复你，当前对话会交给 AI 处理；但普通聊天不会默认变成账号记忆。</span>
                 <button class="text-button" id="memory-login-button" type="button">去登录</button>
               </div>
+              <div class="mode-switch hidden" id="mode-switch" aria-label="选择和小暖相处的模式">
+                <div>
+                  <span class="growth-kicker">今晚的相处方式</span>
+                  <strong id="mode-switch-title">倾诉模式</strong>
+                  <small id="mode-switch-note">小暖先陪你把心里的话放下来，不评价社交表现。</small>
+                </div>
+                <div class="mode-options">
+                  <button data-companion-mode="support" type="button">倾诉</button>
+                  <button data-companion-mode="social" type="button">社交</button>
+                </div>
+              </div>
               <div class="relationship-note" id="relationship-note"></div>
               <div class="growth-card" id="growth-card" aria-live="polite">
                 <div>

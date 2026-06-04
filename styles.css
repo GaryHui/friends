@@ -943,6 +943,61 @@ h4 {
   margin: 0;
 }
 
+.mode-switch {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 10px;
+  padding: 12px;
+  color: rgba(43, 41, 37, 0.88);
+  background: rgba(255, 253, 248, 0.78);
+  border: 1px solid rgba(93, 118, 107, 0.14);
+  border-radius: 12px;
+}
+
+.mode-switch > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mode-switch strong {
+  font-size: 15px;
+}
+
+.mode-switch small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mode-options {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(93, 118, 107, 0.08);
+  border-radius: 999px;
+}
+
+.mode-options button {
+  min-height: 32px;
+  padding: 6px 12px;
+  color: rgba(87, 117, 104, 0.92);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.mode-options button.active {
+  color: #fffdf8;
+  background: var(--moss);
+  box-shadow: 0 8px 18px rgba(87, 117, 104, 0.16);
+}
+
 .privacy-whisper {
   margin: 0 0 10px;
   color: rgba(117, 111, 104, 0.78);
@@ -2264,6 +2319,19 @@ select:focus {
 
   .companion-room {
     display: none;
+  }
+
+  .mode-switch {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mode-options {
+    width: 100%;
+  }
+
+  .mode-options button {
+    flex: 1 1 0;
   }
 
   .conversation-panel {

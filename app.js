@@ -79,6 +79,7 @@ const state = {
   pendingNudge: null,
   nudgeStats: storedNudgeStats,
   cognitionCore: initialCognitionCore,
+  companionMode: localStorage.getItem("nuanyou-companion-mode") || initialCognitionCore.companionMode || "support",
   socialPractice: {
     enabled: localStorage.getItem("nuanyou-social-practice") === "1",
     trust: Number(localStorage.getItem("nuanyou-social-trust") || "35"),
@@ -165,6 +166,10 @@ const forgotPasswordEl = document.querySelector("#forgot-password");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
+const modeSwitchEl = document.querySelector("#mode-switch");
+const modeSwitchTitleEl = document.querySelector("#mode-switch-title");
+const modeSwitchNoteEl = document.querySelector("#mode-switch-note");
+const modeSwitchButtons = document.querySelectorAll("[data-companion-mode]");
 const roomWhisperEl = document.querySelector("#room-whisper");
 const relationshipNoteEl = document.querySelector("#relationship-note");
 const growthStageEl = document.querySelector("#growth-stage");
@@ -205,6 +210,7 @@ function persist() {
   localStorage.setItem("nuanyou-memory-candidates", JSON.stringify(state.memoryCandidates));
   localStorage.setItem("nuanyou-messages", JSON.stringify(state.messages));
   localStorage.setItem("nuanyou-moods", JSON.stringify(state.moods));
+  localStorage.setItem("nuanyou-companion-mode", state.companionMode);
   localStorage.setItem("nuanyou-social-practice", state.socialPractice.enabled ? "1" : "0");
   localStorage.setItem("nuanyou-social-trust", String(state.socialPractice.trust));
   localStorage.setItem("nuanyou-social-comfort", String(state.socialPractice.comfort));
@@ -487,6 +493,7 @@ function summarizeCognitionCore() {
   return {
     self: state.cognitionCore.self,
     principles: state.cognitionCore.principles,
+    companionMode: state.companionMode,
     avoid,
     prefer,
     lifeEvents,
@@ -1223,6 +1230,9 @@ function getGrowthProfile() {
 
 function renderGrowthCard() {
   if (!growthStageEl || !growthCopyEl || !growthNextEl || !growthMeterFillEl) return;
+  const visible = Boolean(state.session) && state.companionMode === "social";
+  growthStageEl.closest(".growth-card")?.classList.toggle("hidden", !visible);
+  if (!visible) return;
   const growth = getGrowthProfile();
   growthStageEl.textContent = growth.stage.label;
   growthCopyEl.textContent = growth.copy;
@@ -1266,13 +1276,69 @@ function getSocialStage() {
   };
 }
 
+function renderCompanionMode() {
+  const signedIn = Boolean(state.session);
+  if (modeSwitchEl) {
+    modeSwitchEl.classList.toggle("hidden", !signedIn);
+  }
+  if (!signedIn) return;
+  const isSocial = state.companionMode === "social";
+  modeSwitchButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.companionMode === state.companionMode);
+    button.setAttribute("aria-pressed", button.dataset.companionMode === state.companionMode ? "true" : "false");
+  });
+  if (modeSwitchTitleEl) {
+    modeSwitchTitleEl.textContent = isSocial ? "社交模式" : "倾诉模式";
+  }
+  if (modeSwitchNoteEl) {
+    modeSwitchNoteEl.textContent = isSocial
+      ? "小暖会像慢慢熟起来的新朋友，也会轻轻反馈相处里的边界和靠近。"
+      : "小暖先陪你把心里的话放下来，不评价社交表现，也不显示关系练习。";
+  }
+}
+
+function setCompanionMode(mode, options = {}) {
+  const nextMode = mode === "social" ? "social" : "support";
+  if (state.companionMode === nextMode && !options.force) return;
+  state.companionMode = nextMode;
+  state.socialPractice.enabled = nextMode === "social";
+  state.socialPractice.lastFeedback =
+    nextMode === "social"
+      ? "社交模式已打开。小暖会更像一个有边界的新朋友，慢慢和你建立信任。"
+      : "倾诉模式已打开。小暖会先陪你，不把聊天变成社交练习。";
+  addCompanionLifeEvent(
+    {
+      type: "companion_mode",
+      title: nextMode === "social" ? "切换到社交模式" : "切换到倾诉模式",
+      summary:
+        nextMode === "social"
+          ? "用户选择和小暖练习相遇、边界和关系成长。"
+          : "用户选择让小暖先作为稳定的倾听对象陪伴。聊到社交也先不做关系评分。",
+      source: "user_setting",
+    },
+    { localOnly: !state.session },
+  );
+  state.cognitionCore.companionMode = state.companionMode;
+  persist();
+  saveCognitionCore({ localOnly: !state.session });
+  renderCompanionMode();
+  renderRelationshipNote();
+  if (!options.silent) {
+    addMessage("friend", state.socialPractice.lastFeedback, "soft-nudge");
+  }
+}
+
 function renderSocialPractice() {
   if (!socialCardEl || !socialStageEl || !socialCopyEl || !socialModeToggleEl) return;
+  const signedIn = Boolean(state.session);
+  const visible = signedIn && state.companionMode === "social";
+  socialCardEl.classList.toggle("hidden", !visible);
+  if (!visible) return;
   const stage = getSocialStage();
   socialCardEl.classList.toggle("active", state.socialPractice.enabled);
   socialStageEl.textContent = stage.label;
   socialCopyEl.textContent = stage.copy;
-  socialModeToggleEl.textContent = state.socialPractice.enabled ? "练习中" : "开启";
+  socialModeToggleEl.textContent = state.socialPractice.enabled ? "暂停" : "继续";
   if (!state.socialPractice.enabled && /讨好|社交能力|相遇练习/.test(state.socialPractice.lastFeedback || "")) {
     state.socialPractice.lastFeedback = "亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。";
   }
@@ -1285,6 +1351,7 @@ function renderSocialPractice() {
 function canUseDirectMemory() {
   return (
     state.session &&
+    state.companionMode === "social" &&
     state.socialPractice.enabled &&
     state.socialPractice.trust >= 60 &&
     state.socialPractice.comfort >= 58 &&
@@ -1311,6 +1378,10 @@ function canDirectlyRememberType(type) {
 
 function renderMemoryPermissionSettings() {
   if (!memoryPermissionCardEl) return;
+  const signedIn = Boolean(state.session);
+  const visible = signedIn && state.companionMode === "social";
+  memoryPermissionCardEl.classList.toggle("hidden", !visible);
+  if (!visible) return;
   const unlocked = canUseDirectMemory();
   const directTypes = getDirectMemoryTypes();
   memoryPermissionCardEl.classList.toggle("locked", !unlocked);
@@ -1324,7 +1395,7 @@ function renderMemoryPermissionSettings() {
 }
 
 function updateSocialPracticeFromUser(text) {
-  if (!state.socialPractice.enabled) return;
+  if (!state.session || state.companionMode !== "social" || !state.socialPractice.enabled) return;
   const clean = text.trim();
   if (!clean) return;
   let trustDelta = 0;
@@ -1391,6 +1462,14 @@ function updateSocialPracticeFromUser(text) {
 function renderRelationshipNote() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
+  const visible = Boolean(state.session) && state.companionMode === "social";
+  relationshipNoteEl.classList.toggle("hidden", !visible);
+  if (!visible) {
+    renderGrowthCard();
+    renderSocialPractice();
+    renderMemoryPermissionSettings();
+    return;
+  }
   const copy = {
     first_meet: "我们还在初次见面。小暖会慢一点，不会装作已经很懂你。",
     acquaintance: "我们刚刚认识。你可以决定靠近多少，小暖不会擅自越界。",
@@ -1468,6 +1547,8 @@ function updateAuthUi() {
     authPasswordEl.autocomplete = state.authMode === "signup" ? "new-password" : "current-password";
     forgotPasswordEl.classList.toggle("hidden", state.authMode !== "signin");
     memoryLoginNoteEl.classList.remove("hidden");
+    renderCompanionMode();
+    renderRelationshipNote();
     return;
   }
   const email = state.session?.user?.email || "";
@@ -1493,6 +1574,8 @@ function updateAuthUi() {
   forgotPasswordEl.classList.toggle("hidden", signedIn || state.passwordRecovery || state.authMode !== "signin");
   authStatusEl.textContent = signedIn && !state.passwordRecovery ? "已登录。小暖只会把你允许记下的事同步到账号；普通聊天不会默认保存成账号记忆。" : "";
   memoryLoginNoteEl.classList.toggle("hidden", signedIn);
+  renderCompanionMode();
+  renderRelationshipNote();
 }
 
 function clearStoredPrivateCache() {
@@ -1504,6 +1587,7 @@ function clearStoredPrivateCache() {
   localStorage.removeItem("nuanyou-memory-login-notice");
   localStorage.removeItem("nuanyou-cognition-core");
   localStorage.removeItem("nuanyou-nudge-stats");
+  localStorage.removeItem("nuanyou-companion-mode");
   localStorage.removeItem("nuanyou-social-practice");
   localStorage.removeItem("nuanyou-social-trust");
   localStorage.removeItem("nuanyou-social-comfort");
@@ -1569,10 +1653,12 @@ async function loadCloudState() {
       lifeEvents: companionCore.core.lifeEvents || [],
     };
     state.nudgeStats = companionCore.nudge_stats || {};
+    state.companionMode = companionCore.core.companionMode === "social" ? "social" : "support";
     state.socialPractice = {
       ...state.socialPractice,
       ...(companionCore.core.socialPractice || {}),
     };
+    state.socialPractice.enabled = state.companionMode === "social" && state.socialPractice.enabled !== false;
     saveCognitionCore({ localOnly: true });
     saveNudgeStats({ localOnly: true });
   } else {
@@ -1613,6 +1699,7 @@ async function saveCognitionCoreRemote() {
     closeness: state.socialPractice.closeness,
     lastFeedback: state.socialPractice.lastFeedback,
   };
+  state.cognitionCore.companionMode = state.companionMode;
   await state.supabase.from("companion_cores").upsert({
     user_id: state.session.user.id,
     core: state.cognitionCore,
@@ -2021,6 +2108,7 @@ async function getAiReply(text, onDelta) {
         profile: state.profile,
         memories: state.memories.slice(0, 20),
         companionStage: getCompanionStage(),
+        companionMode: state.companionMode,
         cognitionCore: summarizeCognitionCore(),
         socialPractice: state.socialPractice,
         history,
@@ -2344,13 +2432,22 @@ proactiveCueToggleEl.addEventListener("click", () => {
   addMessage("friend", "好，我先安静一点。你发出来以后，我再认真接住。", "soft-nudge");
 });
 
+modeSwitchButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!state.session) return;
+    setCompanionMode(button.dataset.companionMode);
+  });
+});
+
 socialModeToggleEl.addEventListener("click", () => {
   state.socialPractice.enabled = !state.socialPractice.enabled;
   state.socialPractice.lastFeedback = state.socialPractice.enabled
-    ? "关系成长已开启。你越稳定、真诚、尊重边界，小暖也会越安心，越愿意把你当成好朋友。"
-    : "关系成长已收起。小暖还是会像朋友一样陪你聊天，只是不再显示亲密度反馈。";
+    ? "好，我继续陪你练习相遇。小暖会留意哪些靠近让她安心，哪些靠近会太快。"
+    : "好，社交反馈先暂停。小暖还在这里，只是不再给相处方式做反馈。";
   persist();
   renderSocialPractice();
+  renderMemoryPermissionSettings();
+  saveCognitionCore();
   addMessage("friend", state.socialPractice.lastFeedback, "soft-nudge");
 });
 

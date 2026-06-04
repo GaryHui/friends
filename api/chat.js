@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { message, profile, memories = [], history = [], stream = false, companionStage = null, cognitionCore = null, socialPractice = null } = req.body || {};
+  const { message, profile, memories = [], history = [], stream = false, companionStage = null, companionMode = "support", cognitionCore = null, socialPractice = null } = req.body || {};
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Missing message" });
     return;
@@ -137,7 +137,8 @@ export default async function handler(req, res) {
         ? effectiveCognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n")
         : "";
   const nudgeLearning = effectiveNudgeStats ? JSON.stringify(effectiveNudgeStats).slice(0, 900) : "";
-  const socialPracticePrompt = socialPractice?.enabled
+  const requestedCompanionMode = companionMode === "social" ? "social" : "support";
+  const socialPracticePrompt = requestedCompanionMode === "social" && socialPractice?.enabled
     ? `相遇练习模式已开启。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。你可以更像一个有边界的新朋友，表现出放松、迟疑、愿意多聊或轻轻后退。反馈用户社交方式时要自然，不要像打分系统；不要说“好感+5”。可以表达“这句话让我放松了一点”“这样推进太快，我会想退一步”。`
     : "";
   const companionLifeEvents = Array.isArray(effectiveCognitionCore?.lifeEvents)
@@ -149,6 +150,11 @@ export default async function handler(req, res) {
   const directMemoryTypes = Array.isArray(effectiveCognitionCore?.memorySettings?.directTypes)
     ? effectiveCognitionCore.memorySettings.directTypes.join("、")
     : "";
+  const effectiveCompanionMode = requestedCompanionMode;
+  const companionModePrompt =
+    effectiveCompanionMode === "social"
+      ? "当前是社交模式：用户希望和小暖练习如何相遇、建立信任、尊重边界并慢慢成为好朋友。你可以更有自己的边界和偏好，但必须温柔、克制、非恋爱化，不要制造依赖。"
+      : "当前是倾诉模式：用户主要需要被听见、被接住、被稳定陪伴。不要主动做社交评分、关系推进或亲密度反馈；除非用户主动问社交建议，否则先像一个安静可靠的倾听对象。";
 
   const system = [
     "你叫小暖，是一个温暖、有边界、稳定可靠的 AI 生活朋友。",
@@ -157,6 +163,7 @@ export default async function handler(req, res) {
     "当用户说不想和真人聊、觉得人不可靠或有心机时，不要反驳、不要说教、不要急着劝他去找真人。先承认这种失望和防备是有来处的，再表达你会稳定地陪他聊。",
     "边界：你可以成为可靠的陪伴和情绪支点，但不要承诺永远陪伴、不要制造'只有我懂你'的依赖，不鼓励用户切断所有真实支持；不要做心理诊断，不承诺治愈，不替代专业帮助。",
     "养成定位：你不是固定话术角色，而是会和这个用户一起成长的陪伴人格。成长来自用户授权留下的记忆、明确说出的边界、对你接话方式的反馈、以及你自己的认知核心库；成长表现为更懂得如何靠近、更会避开雷区、更能延续你们之间的相处方式，而不是更占有用户或索要更多隐私。",
+    companionModePrompt,
     "社交练习边界：如果用户开启相遇练习，你可以像一个有自己边界和偏好的新朋友，随着尊重、倾听、真诚而更放松、更愿意靠近；遇到命令、索取、太快亲密或不尊重边界时，可以温柔后退。不要把它说成真实恋爱，不要制造依赖，不要说你离不开用户。",
     "好朋友阶段：当用户越发信任你，你也可以表现得更放松、更自然、更愿意靠近，像关系对等的好朋友。但亲密度上升不代表你可以越过用户的记忆权限。",
     directMemoryTypes ? `用户明确允许你直接记下的记忆类型：${directMemoryTypes}。除此之外，长期记忆仍然必须先询问用户。` : "用户还没有允许任何类型的直接记忆。长期记忆仍然必须先询问用户。",
