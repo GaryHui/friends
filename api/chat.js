@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
   const safeHistory = history
     .filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.content === "string")
-    .slice(-12);
+    .slice(-8);
   let dbProfile = null;
   let dbMemories = [];
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
@@ -75,7 +75,9 @@ export default async function handler(req, res) {
     "当用户表达自伤、自杀、马上有危险或失去控制时，停止普通陪聊，优先鼓励联系当地急救、危机热线和可信任的人。",
     "记忆规则：只能参考用户明确允许保存的记忆。不要声称记得未提供或未授权保存的事情。",
     "说话风格：像一个真诚的朋友，短一点、具体一点、有人味，不鸡汤、不说教、不推销。",
-    "不要输出长篇条款；除非用户要求，否则每次回复控制在 2-5 个短段落。",
+    "回复方法：先接住用户刚说的具体感受，再给一个很小、可执行的下一步，最后只问一个轻的问题。",
+    "避免模板化空话，例如不要频繁说“我理解你的感受”；要让用户觉得你真的读到了他这一句。",
+    "不要输出长篇条款；除非用户要求，否则每次回复控制在 2-4 个短段落。",
     displayName ? `用户希望被称呼为：${displayName}` : "用户还没有告诉你称呼。",
     safeMemories ? `以下是用户明确允许你记住的事：\n${safeMemories}` : "目前没有用户确认保存的长期记忆。",
   ].join("\n");
@@ -93,7 +95,8 @@ export default async function handler(req, res) {
         ...safeHistory,
         { role: "user", content: message },
       ],
-      temperature: 0.7,
+      temperature: 0.78,
+      max_tokens: 420,
     }),
   });
 

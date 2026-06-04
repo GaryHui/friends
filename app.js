@@ -47,6 +47,7 @@ const authPanelEl = document.querySelector("#auth-panel");
 const authToggleEl = document.querySelector("#auth-toggle");
 const authFormEl = document.querySelector("#auth-form");
 const authStatusEl = document.querySelector("#auth-status");
+const thinkingEl = document.querySelector("#thinking");
 
 function persist() {
   localStorage.setItem("nuanyou-tone", state.tone);
@@ -92,6 +93,10 @@ function renderMessages() {
     messagesEl.appendChild(bubble);
   });
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setThinking(isThinking) {
+  thinkingEl.classList.toggle("hidden", !isThinking);
 }
 
 function formatTime(value) {
@@ -396,7 +401,7 @@ async function getAiReply(text) {
     return makeReply(text);
   }
 
-  const history = state.messages.slice(-12).map((message) => ({
+  const history = state.messages.slice(-8).map((message) => ({
     role: message.role === "friend" ? "assistant" : "user",
     content: message.text,
   }));
@@ -435,17 +440,22 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
 
   addMessage("user", text);
   inputEl.value = "";
+  setThinking(true);
   const memoryCandidate = detectMemoryCandidate(text);
 
   window.setTimeout(async () => {
-    if (hasCrisisLanguage(text)) {
-      showCrisisSupport();
-    } else {
-      const reply = await getAiReply(text);
-      addMessage("friend", reply);
-      if (memoryCandidate) {
-        showMemoryRequest(memoryCandidate);
+    try {
+      if (hasCrisisLanguage(text)) {
+        showCrisisSupport();
+      } else {
+        const reply = await getAiReply(text);
+        addMessage("friend", reply);
+        if (memoryCandidate) {
+          showMemoryRequest(memoryCandidate);
+        }
       }
+    } finally {
+      setThinking(false);
     }
   }, 420);
 });
