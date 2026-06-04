@@ -1948,6 +1948,10 @@ select:focus {
   opacity: 0.52;
 }
 
+.memory-permission-card.locked .memory-permission-list {
+  display: none;
+}
+
 .manual-memory-form {
   display: grid;
   gap: 10px;

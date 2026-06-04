@@ -414,7 +414,10 @@ function addCompanionLifeEvent(event, options = {}) {
 function ensureCompanionFirstMeet() {
   if (!state.profile) return;
   const hasFirstMeet = (state.cognitionCore.lifeEvents || []).some((event) => event.type === "first_meet");
-  if (hasFirstMeet) return;
+  if (hasFirstMeet) {
+    ensureFirstMeetMemory();
+    return;
+  }
   const toneLabel =
     {
       gentle: "先听见你",
@@ -431,6 +434,27 @@ function ensureCompanionFirstMeet() {
     },
     { localOnly: !state.session },
   );
+  ensureFirstMeetMemory();
+}
+
+function ensureFirstMeetMemory() {
+  if (!state.session || !state.profile?.metAt) return;
+  const exists = state.memories.some(
+    (memory) => memory.source === "first_meet" || /小暖第一次认识你/.test(memory.content || ""),
+  );
+  if (exists) return;
+  const memory = {
+    id: crypto.randomUUID ? crypto.randomUUID() : `first-meet-${Date.now()}`,
+    type: "relationship",
+    content: `小暖第一次认识你：${formatDiaryDate(state.profile.metAt)}。这是你们关系开始的日期。`,
+    status: "active",
+    createdAt: state.profile.metAt,
+    source: "first_meet",
+  };
+  state.memories.unshift(memory);
+  persist();
+  renderRecords();
+  syncMemory(memory);
 }
 
 function rememberCompanionLearnedMemory(memory) {
@@ -947,6 +971,20 @@ function formatTime(value) {
   });
 }
 
+function getMemoryTypeLabel(type) {
+  return (
+    {
+      identity: "称呼",
+      preference: "陪伴偏好",
+      personality: "性格节奏",
+      trigger: "边界",
+      support: "有效方法",
+      progress: "旧事新进展",
+      relationship: "关系日期",
+    }[type] || "记忆"
+  );
+}
+
 function formatDiaryDate(value) {
   return new Date(value).toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -1018,7 +1056,7 @@ function renderRecords() {
       item.className = "memory-candidate";
       item.innerHTML = `
         <div class="record-meta">
-          <span>${candidate.type} · 待你决定</span>
+          <span>${getMemoryTypeLabel(candidate.type)} · 待你决定</span>
         </div>
         <textarea data-candidate-edit="${candidate.id}" aria-label="编辑这条候选记忆">${candidate.content}</textarea>
         <div class="memory-candidate-actions">
@@ -1040,7 +1078,7 @@ function renderRecords() {
       item.innerHTML = `
         <p>${memory.content}</p>
         <div class="record-meta">
-          <span>${memory.type} · ${formatTime(memory.createdAt)}</span>
+          <span>${getMemoryTypeLabel(memory.type)} · ${formatTime(memory.createdAt)}</span>
           <button class="delete-record" data-memory-id="${memory.id}" type="button">删除</button>
         </div>
       `;
@@ -1384,14 +1422,24 @@ function renderMemoryPermissionSettings() {
   if (!visible) return;
   const unlocked = canUseDirectMemory();
   const directTypes = getDirectMemoryTypes();
+  const titleEl = memoryPermissionCardEl.querySelector("strong");
+  const copyEl = memoryPermissionCardEl.querySelector("span");
   memoryPermissionCardEl.classList.toggle("locked", !unlocked);
+  if (titleEl) {
+    titleEl.textContent = unlocked ? "你可以决定哪些事以后不用重复确认。" : "现在小暖还会每次先问你。";
+  }
+  if (copyEl) {
+    copyEl.textContent = unlocked
+      ? "只有你勾选的类型，小暖才可以直接记下；没勾选的仍然会先问你，你也随时可以取消。"
+      : "等你和小暖更熟以后，如果你愿意，才可以允许某些类型不再重复确认；你随时可以取消。";
+  }
   memoryPermissionInputs.forEach((input) => {
     input.checked = directTypes.includes(input.value);
     input.disabled = !unlocked;
   });
   memoryPermissionNoteEl.textContent = unlocked
     ? "你们已经比较熟了。你可以选择哪些类型以后直接记下；没勾选的仍然会先问你。"
-    : "等你和小暖的信任、安心和亲密都更稳定后，这里会解锁。现在小暖仍会先问你。";
+    : "现在还不用选。等你和小暖的信任、安心和亲密都更稳定后，这里才会出现可开启的选项；在那之前，小暖每次都会先问你。";
 }
 
 function updateSocialPracticeFromUser(text) {
@@ -1764,6 +1812,7 @@ function rememberPreferredName(name) {
   topEyebrowEl.textContent = `欢迎你，${name}`;
   appShellEl.classList.remove("intro-mode");
   persist();
+  ensureCompanionFirstMeet();
   saveProfileRemote();
 }
 
