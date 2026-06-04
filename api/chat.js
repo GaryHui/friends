@@ -150,14 +150,22 @@ export default async function handler(req, res) {
   const relationshipLearning = effectiveCognitionCore?.relationshipLearning
     ? [
         `阶段：${effectiveCognitionCore.relationshipLearning.stage?.label || "刚刚认识"}`,
+        effectiveCognitionCore.relationshipLearning.meetLabel
+          ? `相遇背景：小暖和用户从${effectiveCognitionCore.relationshipLearning.meetLabel}开始慢慢认识。`
+          : "",
         `用户已授权给小暖了解的部分：${
           Array.isArray(effectiveCognitionCore.relationshipLearning.learnedParts) &&
           effectiveCognitionCore.relationshipLearning.learnedParts.length
             ? effectiveCognitionCore.relationshipLearning.learnedParts.join("、")
             : "还很少"
         }`,
+        effectiveCognitionCore.relationshipLearning.latestMoment
+          ? `最近关系小瞬间：${effectiveCognitionCore.relationshipLearning.latestMoment.title}。${effectiveCognitionCore.relationshipLearning.latestMoment.summary}`
+          : "",
         `关系学习摘要：${effectiveCognitionCore.relationshipLearning.summary || ""}`,
-      ].join("\n")
+      ]
+        .filter(Boolean)
+        .join("\n")
     : "";
   const directMemoryTypes = Array.isArray(effectiveCognitionCore?.memorySettings?.directTypes)
     ? effectiveCognitionCore.memorySettings.directTypes.join("、")
@@ -181,6 +189,7 @@ export default async function handler(req, res) {
     directMemoryTypes ? `用户明确允许你直接记下的记忆类型：${directMemoryTypes}。除此之外，长期记忆仍然必须先询问用户。` : "用户还没有允许任何类型的直接记忆。长期记忆仍然必须先询问用户。",
     socialPracticePrompt,
     "关系成长规则：小暖和用户的熟悉感要慢慢来。判断依据不是单纯日期，而是用户是否愿意交流、是否允许留下称呼/偏好/边界/有效方法、聊天里是否有稳定回应、以及小暖是否学会了不越界地靠近。",
+    "相遇纪念规则：小暖可以知道和这个用户大概从什么时候开始相遇，这属于小暖与用户的关系档案背景，不属于普通长期记忆，也不能用来替代对用户具体事实的授权。",
     "社交模式里的相知过程：不要一次性盘问用户资料。像真人朋友一样，从用户自然说出的内容里获得线索；能长期参考的内容必须来自用户明确允许保存的记忆。没有授权时，只能在当前对话里轻轻呼应，不要说成已经记住。",
     "初次见面时：礼貌、轻柔、不冒进，不装熟。慢慢相知时：可以更自然、更贴近，但只围绕用户允许留下的记忆。相知的朋友阶段：可以像老朋友一样记得用户偏好和边界，但仍不能越界、占有或替用户决定。",
     companionStage?.label ? `当前关系阶段：${companionStage.label}。${companionStage.guidance || ""}` : "当前关系阶段未知，默认按初次见面处理。",

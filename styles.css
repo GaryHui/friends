@@ -2105,6 +2105,35 @@ select:focus {
   gap: 10px;
 }
 
+.relationship-moments {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.relationship-moment {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  color: rgba(43, 41, 37, 0.84);
+  background: rgba(248, 252, 245, 0.72);
+  border: 1px solid rgba(93, 118, 107, 0.14);
+  border-radius: 14px;
+}
+
+.relationship-moment strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.relationship-moment p,
+.relationship-moment span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .record-item {
   display: grid;
   gap: 8px;

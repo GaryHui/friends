@@ -19,6 +19,10 @@ const defaultCognitionCore = {
   memorySettings: {
     directTypes: [],
   },
+  relationshipProfile: {
+    metAt: "",
+    meetLabel: "",
+  },
   lifeEvents: [],
   updatedAt: "",
 };
@@ -38,6 +42,10 @@ const initialCognitionCore = {
   memorySettings: {
     ...defaultCognitionCore.memorySettings,
     ...(storedCognitionCore?.memorySettings || {}),
+  },
+  relationshipProfile: {
+    ...defaultCognitionCore.relationshipProfile,
+    ...(storedCognitionCore?.relationshipProfile || {}),
   },
   lifeEvents: storedCognitionCore?.lifeEvents || [],
 };
@@ -129,6 +137,7 @@ const memoryRequestEl = document.querySelector("#memory-request");
 const memoryTextEl = document.querySelector("#memory-text");
 const memoryListEl = document.querySelector("#memory-list");
 const memoryInboxEl = document.querySelector("#memory-inbox");
+const relationshipMomentsEl = document.querySelector("#relationship-moments");
 const memoryPermissionCardEl = document.querySelector("#memory-permission-card");
 const memoryPermissionNoteEl = document.querySelector("#memory-permission-note");
 const memoryPermissionInputs = document.querySelectorAll(".memory-permission-list input");
@@ -413,6 +422,7 @@ function addCompanionLifeEvent(event, options = {}) {
 
 function ensureCompanionFirstMeet() {
   if (!state.profile) return;
+  ensureRelationshipProfile();
   const hasFirstMeet = (state.cognitionCore.lifeEvents || []).some((event) => event.type === "first_meet");
   if (hasFirstMeet) return;
   const toneLabel =
@@ -424,13 +434,23 @@ function ensureCompanionFirstMeet() {
   addCompanionLifeEvent(
     {
       type: "first_meet",
-      title: "第一次见面",
-      summary: `小暖从这一天开始认识这个用户。称呼：${state.profile.name || "暂时不说"}；最初选择的陪伴方式：${toneLabel}。`,
+      title: "初次相遇",
+      summary: `小暖和这个用户从${formatMeetMoment(state.profile.metAt)}开始慢慢说话。称呼：${state.profile.name || "暂时不说"}；最初选择的陪伴方式：${toneLabel}。`,
       source: "profile_start",
       createdAt: state.profile.metAt || new Date().toISOString(),
     },
     { localOnly: !state.session },
   );
+}
+
+function ensureRelationshipProfile() {
+  if (!state.profile?.metAt) return;
+  state.cognitionCore.relationshipProfile = {
+    ...(state.cognitionCore.relationshipProfile || {}),
+    metAt: state.profile.metAt,
+    meetLabel: formatMeetMoment(state.profile.metAt),
+  };
+  saveCognitionCore({ localOnly: !state.session });
 }
 
 function cleanupGeneratedFirstMeetMemories() {
@@ -979,6 +999,13 @@ function formatDiaryDate(value) {
   });
 }
 
+function formatMeetMoment(value) {
+  const date = new Date(value || Date.now());
+  const hour = date.getHours();
+  const dayPart = hour < 6 ? "凌晨" : hour < 12 ? "上午" : hour < 18 ? "下午" : "晚上";
+  return `${formatDiaryDate(date)}${dayPart}`;
+}
+
 function getDiaryDayKey(value) {
   const date = new Date(value);
   const year = date.getFullYear();
@@ -1018,6 +1045,7 @@ function clampDiaryPage() {
 function renderRecords() {
   memoryListEl.innerHTML = "";
   memoryInboxEl.innerHTML = "";
+  if (relationshipMomentsEl) relationshipMomentsEl.innerHTML = "";
   const hasDiaryAccess = Boolean(state.session);
   recordsLoginGateEl.classList.toggle("hidden", hasDiaryAccess);
   document.querySelector(".privacy-card").classList.toggle("hidden", !hasDiaryAccess);
@@ -1028,6 +1056,7 @@ function renderRecords() {
   if (!hasDiaryAccess) {
     memoryListEl.innerHTML = '<p class="muted">还没有开启账号记忆。随便聊聊时，小暖不会留下日记本。</p>';
     memoryInboxEl.innerHTML = "";
+    if (relationshipMomentsEl) relationshipMomentsEl.innerHTML = "";
     diaryDaysEl.innerHTML = "";
     diaryEntryListEl.innerHTML = "";
     return;
@@ -1053,6 +1082,8 @@ function renderRecords() {
       memoryInboxEl.appendChild(item);
     });
   }
+
+  renderRelationshipMoments();
 
   if (state.memories.length === 0) {
     memoryListEl.innerHTML = '<p class="muted">还没有长期记忆。小暖想记住什么，会先问你。</p>';
@@ -1112,6 +1143,39 @@ function renderRecords() {
       </div>
     `;
     diaryEntryListEl.appendChild(item);
+  });
+}
+
+function getRelationshipMoments() {
+  const allowedTypes = new Set([
+    "first_meet",
+    "companion_mode",
+    "user_allowed_memory",
+    "memory_permission",
+    "social_practice",
+    "learned_style",
+    "memory_follow_up",
+  ]);
+  return (state.cognitionCore.lifeEvents || []).filter((event) => allowedTypes.has(event.type)).slice(0, 6);
+}
+
+function renderRelationshipMoments() {
+  if (!relationshipMomentsEl) return;
+  const moments = getRelationshipMoments();
+  if (!moments.length) {
+    relationshipMomentsEl.innerHTML = '<p class="muted">还没有关系小瞬间。等你和小暖多聊一点，这里会留下她自己的成长节点。</p>';
+    return;
+  }
+  relationshipMomentsEl.innerHTML = "";
+  moments.forEach((moment) => {
+    const item = document.createElement("article");
+    item.className = "relationship-moment";
+    item.innerHTML = `
+      <strong>${moment.title}</strong>
+      <p>${moment.summary}</p>
+      <span>${formatTime(moment.createdAt)}</span>
+    `;
+    relationshipMomentsEl.appendChild(item);
   });
 }
 
@@ -1257,6 +1321,9 @@ function getGrowthProfile() {
 function getRelationshipLearning() {
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
   const memoryTypes = new Set(state.memories.map((memory) => memory.type));
+  const relationshipProfile = state.cognitionCore.relationshipProfile || {};
+  const meetLabel = relationshipProfile.meetLabel || (state.profile?.metAt ? formatMeetMoment(state.profile.metAt) : "");
+  const latestMoment = getRelationshipMoments()[0] || null;
   const pieces = [];
   if (state.profile?.name) pieces.push("称呼");
   if (memoryTypes.has("preference")) pieces.push("陪伴偏好");
@@ -1267,15 +1334,23 @@ function getRelationshipLearning() {
   const knownParts = pieces.slice(0, 3).join("、");
   const stage = getCompanionStage();
   const summary = knownParts
-    ? `小暖正在通过你允许留下的${knownParts}，慢慢学会怎样靠近你。`
+    ? `从${meetLabel || "相遇那一刻"}开始，小暖正在通过你允许留下的${knownParts}，慢慢学会怎样靠近你。`
     : userMessageCount >= 3
-    ? "小暖还不急着定义你，只先从你说话的节奏里慢慢认识你。"
-    : "你们还在刚认识的阶段，小暖会先轻一点，不装熟。";
+    ? `从${meetLabel || "相遇那一刻"}开始，小暖还不急着定义你，只先从你说话的节奏里慢慢认识你。`
+    : `你们${meetLabel ? `从${meetLabel}开始` : "刚刚"}相遇，小暖会先轻一点，不装熟。`;
   return {
     stage,
+    meetLabel,
     userMessageCount,
     memoryCount: state.memories.length,
     learnedParts: pieces,
+    latestMoment: latestMoment
+      ? {
+          title: latestMoment.title,
+          summary: latestMoment.summary,
+          createdAt: latestMoment.createdAt,
+        }
+      : null,
     summary,
   };
 }
@@ -1713,6 +1788,10 @@ async function loadCloudState() {
       memorySettings: {
         ...defaultCognitionCore.memorySettings,
         ...(companionCore.core.memorySettings || {}),
+      },
+      relationshipProfile: {
+        ...defaultCognitionCore.relationshipProfile,
+        ...(companionCore.core.relationshipProfile || {}),
       },
       lifeEvents: companionCore.core.lifeEvents || [],
     };
