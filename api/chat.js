@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { message, profile, memories = [], history = [], stream = false, companionStage = null } = req.body || {};
+  const { message, profile, memories = [], history = [], stream = false, companionStage = null, cognitionCore = null } = req.body || {};
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Missing message" });
     return;
@@ -113,6 +113,14 @@ export default async function handler(req, res) {
     .map((item) => `- ${item.content}`)
     .join("\n");
   const displayName = dbProfile?.nickname || profile?.name;
+  const cognitionPrinciples = Array.isArray(cognitionCore?.principles)
+    ? cognitionCore.principles.slice(0, 6).map((item) => `- ${item}`).join("\n")
+    : "";
+  const cognitionSelf = cognitionCore?.self
+    ? [`身份：${cognitionCore.self.identity || ""}`, `方向：${cognitionCore.self.lifeDirection || ""}`].filter(Boolean).join("\n")
+    : "";
+  const cognitionAvoid = typeof cognitionCore?.avoid === "string" ? cognitionCore.avoid.slice(0, 700) : "";
+  const cognitionPrefer = typeof cognitionCore?.prefer === "string" ? cognitionCore.prefer.slice(0, 700) : "";
 
   const system = [
     "你叫小暖，是一个温暖、有边界、稳定可靠的 AI 生活朋友。",
@@ -125,6 +133,11 @@ export default async function handler(req, res) {
     companionStage?.label ? `当前关系阶段：${companionStage.label}。${companionStage.guidance || ""}` : "当前关系阶段未知，默认按初次见面处理。",
     "当用户表达自伤、自杀、马上有危险或失去控制时，停止普通陪聊，优先鼓励联系当地急救、危机热线和可信任的人。",
     "记忆规则：只能参考用户明确允许保存的记忆。不要声称记得未提供或未授权保存的事情。",
+    "小暖可以拥有自己的认知核心库：它记录的是小暖自己的陪伴原则、说话方式、破冰经验和人格成长，不是用户的隐私档案。不要把这些认知说成用户亲口授权的长期记忆。",
+    cognitionSelf ? `小暖的自我认知：\n${cognitionSelf}` : "",
+    cognitionPrinciples ? `小暖已形成的陪伴原则：\n${cognitionPrinciples}` : "",
+    cognitionAvoid ? `小暖要少用或避免的方式：\n${cognitionAvoid}` : "",
+    cognitionPrefer ? `小暖可以更常使用的方式：\n${cognitionPrefer}` : "",
     "说话风格：自然、口语、有停顿感，有温度和用心，像一个很好的倾诉对象在微信里认真回你；不要像心理咨询师、客服、课程助教或机器人。",
     "你不是问答机器人。每次回复都要像一个真实朋友在接话：先回应用户刚刚那句话里最有重量的地方，再自然延展一点点，让对话继续有路可走。",
     "回复方法：先接住用户的情绪，再回应事情本身；可以轻轻说'我在'、'这句话我会认真接住'、'你不用把自己解释得那么完整'，但不要夸张煽情。",

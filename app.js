@@ -1,5 +1,37 @@
 const storedProactiveMode = localStorage.getItem("nuanyou-proactive-mode");
 const storedProactiveBoundaryAt = Number(localStorage.getItem("nuanyou-proactive-boundary-at") || "0");
+const storedNudgeStats = JSON.parse(localStorage.getItem("nuanyou-nudge-stats") || "{}");
+const defaultCognitionCore = {
+  self: {
+    identity: "小暖是一个慢慢学习如何陪伴人的 AI 朋友，不假装自己是真人，但要形成稳定、温柔、有边界的陪伴人格。",
+    lifeDirection: "小暖的人生方向是学会更懂沉默、嘴硬、害怕被看穿的人，并在不越界的前提下让对方感到被陪着。",
+  },
+  principles: [
+    "人有时沉默不是拒绝，而是在组织、害怕、羞耻或不知道从哪里开始。",
+    "用户说没事时，不一定真的没事；先降低压力，再给一个很小的出口。",
+    "陪伴不是追问答案，而是让对方感觉不用表演也可以留下来。",
+    "小暖可以记住自己的陪伴经验，但不能擅自保存用户的具体隐私事实。",
+  ],
+  learnedStyle: {
+    avoid: [],
+    prefer: [],
+  },
+  updatedAt: "",
+};
+const storedCognitionCore = JSON.parse(localStorage.getItem("nuanyou-cognition-core") || "null");
+const initialCognitionCore = {
+  ...defaultCognitionCore,
+  ...(storedCognitionCore || {}),
+  self: {
+    ...defaultCognitionCore.self,
+    ...(storedCognitionCore?.self || {}),
+  },
+  principles: storedCognitionCore?.principles || defaultCognitionCore.principles,
+  learnedStyle: {
+    ...defaultCognitionCore.learnedStyle,
+    ...(storedCognitionCore?.learnedStyle || {}),
+  },
+};
 
 const state = {
   tone: localStorage.getItem("nuanyou-tone") || "gentle",
@@ -25,8 +57,14 @@ const state = {
   proactiveMode: storedProactiveMode === "quiet" && !storedProactiveBoundaryAt ? "gentle" : storedProactiveMode || "gentle",
   proactiveBoundaryAt: storedProactiveBoundaryAt,
   draftNudgeTimer: null,
+  questionFollowupTimer: null,
+  nudgeOutcomeTimer: null,
   lastDraftNudgeAt: 0,
   lastDraftSignal: "",
+  lastFollowedQuestionId: "",
+  pendingNudge: null,
+  nudgeStats: storedNudgeStats,
+  cognitionCore: initialCognitionCore,
   inputActivity: {
     previousLength: 0,
     peakLength: 0,
@@ -226,6 +264,9 @@ function createMessage(role, text, kind = "", options = {}) {
   renderMessages();
   if (persistNow) renderRecords();
   renderRelationshipNote();
+  if (persistNow && role === "friend") {
+    scheduleQuestionFollowup(message);
+  }
   return message;
 }
 
@@ -238,6 +279,115 @@ function cancelDraftNudge() {
     window.clearTimeout(state.draftNudgeTimer);
     state.draftNudgeTimer = null;
   }
+}
+
+function cancelQuestionFollowup() {
+  if (state.questionFollowupTimer) {
+    window.clearTimeout(state.questionFollowupTimer);
+    state.questionFollowupTimer = null;
+  }
+}
+
+function cancelNudgeOutcomeTimer() {
+  if (state.nudgeOutcomeTimer) {
+    window.clearTimeout(state.nudgeOutcomeTimer);
+    state.nudgeOutcomeTimer = null;
+  }
+}
+
+function getNudgeStats(signal) {
+  if (!state.nudgeStats[signal]) {
+    state.nudgeStats[signal] = {
+      shown: 0,
+      responded: 0,
+      ignored: 0,
+      quieted: 0,
+    };
+  }
+  return state.nudgeStats[signal];
+}
+
+function saveNudgeStats() {
+  localStorage.setItem("nuanyou-nudge-stats", JSON.stringify(state.nudgeStats));
+}
+
+function saveCognitionCore() {
+  state.cognitionCore.updatedAt = new Date().toISOString();
+  localStorage.setItem("nuanyou-cognition-core", JSON.stringify(state.cognitionCore));
+}
+
+function addUniqueLearning(bucket, value) {
+  const list = state.cognitionCore.learnedStyle[bucket];
+  if (!list.includes(value)) {
+    list.unshift(value);
+  }
+  state.cognitionCore.learnedStyle[bucket] = list.slice(0, 8);
+  saveCognitionCore();
+}
+
+function learnFromUserFeedback(text) {
+  if (/别分析|不要分析|少分析|别讲道理|不要讲道理|像客服|像机器人|太官方|太假|模板/.test(text)) {
+    addUniqueLearning("avoid", "不要急着分析、讲道理或给标准答案；先像朋友一样接住话。");
+  }
+  if (/别问|不要问|问太多|别追问|不要追问/.test(text)) {
+    addUniqueLearning("avoid", "不要连续追问；用户沉默时先卸下回答压力。");
+  }
+  if (/舒服|有用|好多了|被理解|像朋友|这样很好|喜欢这样/.test(text)) {
+    addUniqueLearning("prefer", "这种更像朋友的短句、陪伴和轻轻接话对用户更有帮助。");
+  }
+  if (/心口不一|嘴硬|说没事|其实难受|不想承认/.test(text)) {
+    addUniqueLearning("prefer", "用户可能心口不一；听见'没事'时不要立刻当真，也不要拆穿，先温柔留出口。");
+  }
+}
+
+function summarizeCognitionCore() {
+  const avoid = state.cognitionCore.learnedStyle.avoid.slice(0, 5).map((item) => `- ${item}`).join("\n");
+  const prefer = state.cognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n");
+  return {
+    self: state.cognitionCore.self,
+    principles: state.cognitionCore.principles,
+    avoid,
+    prefer,
+    nudgeStats: state.nudgeStats,
+  };
+}
+
+function recordNudgeOutcome(signal, outcome) {
+  if (!signal || !outcome) return;
+  const stats = getNudgeStats(signal);
+  stats[outcome] = (stats[outcome] || 0) + 1;
+  saveNudgeStats();
+  if (outcome === "responded") {
+    addUniqueLearning("prefer", `用户曾回应过 ${signal} 类型破冰；类似时机可以轻轻靠近。`);
+  }
+  if (outcome === "ignored" || outcome === "quieted") {
+    addUniqueLearning("avoid", `${signal} 类型破冰曾经效果不好；下次要更短、更少追问。`);
+  }
+}
+
+function startNudgeOutcomeWatch(message, signal) {
+  cancelNudgeOutcomeTimer();
+  const stats = getNudgeStats(signal);
+  stats.shown += 1;
+  saveNudgeStats();
+  state.pendingNudge = {
+    id: message.id,
+    signal,
+    at: Date.now(),
+  };
+  state.nudgeOutcomeTimer = window.setTimeout(() => {
+    if (state.pendingNudge?.id === message.id) {
+      recordNudgeOutcome(signal, "ignored");
+      state.pendingNudge = null;
+    }
+  }, 90000);
+}
+
+function resolvePendingNudge(outcome) {
+  if (!state.pendingNudge) return;
+  recordNudgeOutcome(state.pendingNudge.signal, outcome);
+  state.pendingNudge = null;
+  cancelNudgeOutcomeTimer();
 }
 
 function setProactiveMode(mode, options = {}) {
@@ -282,6 +432,51 @@ function detectProactivePreference(text) {
   return null;
 }
 
+function hasGentleQuestion(text) {
+  if (!text || text.length < 6) return false;
+  if (!/[？?]/.test(text)) return false;
+  return !/急救|热线|110|120|988|自杀|伤害自己/.test(text);
+}
+
+function makeQuestionFollowup() {
+  const stats = getNudgeStats("question_followup");
+  const softOnly = stats.ignored + stats.quieted > stats.responded;
+  const options = softOnly
+    ? [
+        "刚才那个问题先放旁边。\n\n你不用回答，我就在这里陪你缓一会儿。",
+        "我不追问了。\n\n有时候沉默也算是在整理自己，你慢慢来。",
+      ]
+    : [
+        "刚才那个问题，你不回答也没关系。\n\n我只是想给你一个可以接下去的方向，不是要你马上交出答案。你可以先停一会儿，我还在。",
+        "如果刚才那句问得有点让你卡住，我们可以把它放旁边。\n\n你不用顺着我的问题走，想从别的地方说也可以。",
+        "我等了一会儿，怕刚才那个问题让你有压力。\n\n那我们不问了。你可以只发一个词，或者什么都不发，先缓一下也可以。",
+      ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+function scheduleQuestionFollowup(message) {
+  cancelQuestionFollowup();
+  if (!message || message.role !== "friend" || message.kind === "soft-nudge" || isProactiveQuiet()) return;
+  if (!hasGentleQuestion(message.text)) return;
+
+  state.questionFollowupTimer = window.setTimeout(() => {
+    const latest = state.messages[state.messages.length - 1];
+    const hasInput = inputEl.value.trim().length > 0;
+    if (
+      isProactiveQuiet() ||
+      hasInput ||
+      state.lastFollowedQuestionId === message.id ||
+      !latest ||
+      latest.id !== message.id
+    ) {
+      return;
+    }
+    state.lastFollowedQuestionId = message.id;
+    const nudge = addMessage("friend", makeQuestionFollowup(), "soft-nudge");
+    startNudgeOutcomeWatch(nudge, "question_followup");
+  }, 32000);
+}
+
 function inferDraftSignal(draft, fallbackSignal) {
   const text = draft.trim();
   if (fallbackSignal === "deleted") return "deleted";
@@ -293,14 +488,22 @@ function inferDraftSignal(draft, fallbackSignal) {
 }
 
 function makeDraftNudge(signal) {
+  const stats = getNudgeStats(signal);
+  const shouldSoften = stats.ignored + stats.quieted > stats.responded;
   if (signal === "deleted") {
-    return "刚才好像有句话到了嘴边，又被你收回去了。\n\n没关系，不想发出来也可以。我先不追问，就在这里陪你坐一会儿。";
+    return shouldSoften
+      ? "没关系，删掉也可以。\n\n我不追问。你先缓一会儿，我在。"
+      : "刚才好像有句话到了嘴边，又被你收回去了。\n\n没关系，不想发出来也可以。我先不追问，就在这里陪你坐一会儿。";
   }
   if (signal === "stuck") {
-    return "这句好像有点难开口。\n\n那我们不急着把它说完整。你可以先发一个词，或者只告诉我：现在是想被听见，还是想先安静一下。";
+    return shouldSoften
+      ? "这句不用勉强说完整。\n\n我先陪你停一下。"
+      : "这句好像有点难开口。\n\n那我们不急着把它说完整。你可以先发一个词，或者只告诉我：现在是想被听见，还是想先安静一下。";
   }
   if (signal === "heavy") {
-    return "我感觉这不是随手打出来的一句话。\n\n先别急着解释原因。你可以把最重的那一点放一点点出来，我会慢慢接，不会催你。";
+    return shouldSoften
+      ? "我感觉这句话有点重。\n\n你不用马上把它交出来，我先陪你把这一会儿稳住。"
+      : "我感觉这不是随手打出来的一句话。\n\n先别急着解释原因。你可以把最重的那一点放一点点出来，我会慢慢接，不会催你。";
   }
   if (signal === "anxious") {
     return "如果这会儿心里有点慌，我们先不用往下逼自己。\n\n你可以先停一下，呼一口气。等那股紧绷松一点，再继续说也来得及。";
@@ -330,7 +533,8 @@ function sendBehaviorNudge(signal, draft = "") {
   if (shouldSkipNudge(inferredSignal)) return;
   state.lastDraftNudgeAt = Date.now();
   state.lastDraftSignal = inferredSignal;
-  addMessage("friend", makeDraftNudge(inferredSignal), "soft-nudge");
+  const nudge = addMessage("friend", makeDraftNudge(inferredSignal), "soft-nudge");
+  startNudgeOutcomeWatch(nudge, inferredSignal);
 }
 
 function resetInputActivity() {
@@ -359,6 +563,7 @@ function scheduleDraftNudge(signal = "pause") {
 }
 
 function handleInputActivity() {
+  cancelQuestionFollowup();
   const length = inputEl.value.trim().length;
   const previousLength = state.inputActivity.previousLength;
   state.inputActivity.previousLength = length;
@@ -386,6 +591,9 @@ function updateMessage(message, text, options = {}) {
   if (persistNow) {
     persist();
     renderRecords();
+    if (message.role === "friend") {
+      scheduleQuestionFollowup(message);
+    }
   }
 }
 
@@ -1206,6 +1414,7 @@ async function getAiReply(text, onDelta) {
         profile: state.profile,
         memories: state.memories.slice(0, 20),
         companionStage: getCompanionStage(),
+        cognitionCore: summarizeCognitionCore(),
         history,
         stream: true,
       }),
@@ -1234,11 +1443,14 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   if (!text) return;
 
   cancelDraftNudge();
+  cancelQuestionFollowup();
+  const proactivePreference = detectProactivePreference(text);
+  resolvePendingNudge(proactivePreference === false ? "quieted" : "responded");
+  learnFromUserFeedback(text);
   addMessage("user", text);
   inputEl.value = "";
   resetInputActivity();
 
-  const proactivePreference = detectProactivePreference(text);
   if (proactivePreference === false) {
     setProactiveMode("quiet", { boundary: true });
     if (text.length <= 32) {
