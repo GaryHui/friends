@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { normalizeSupabaseUrl } from "./supabase-url.js";
 
 const BASE_URL = process.env.QWEN_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const MODEL = process.env.QWEN_MODEL || "qwen-plus";
@@ -86,7 +87,7 @@ export default async function handler(req, res) {
   let dbMemories = [];
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (token && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = createClient(normalizeSupabaseUrl(process.env.SUPABASE_URL), process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { data: userData } = await supabase.auth.getUser(token);
     const userId = userData?.user?.id;
     if (userId) {
