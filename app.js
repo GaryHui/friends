@@ -414,10 +414,7 @@ function addCompanionLifeEvent(event, options = {}) {
 function ensureCompanionFirstMeet() {
   if (!state.profile) return;
   const hasFirstMeet = (state.cognitionCore.lifeEvents || []).some((event) => event.type === "first_meet");
-  if (hasFirstMeet) {
-    ensureFirstMeetMemory();
-    return;
-  }
+  if (hasFirstMeet) return;
   const toneLabel =
     {
       gentle: "先听见你",
@@ -434,27 +431,14 @@ function ensureCompanionFirstMeet() {
     },
     { localOnly: !state.session },
   );
-  ensureFirstMeetMemory();
 }
 
-function ensureFirstMeetMemory() {
-  if (!state.session || !state.profile?.metAt) return;
-  const exists = state.memories.some(
-    (memory) => memory.source === "first_meet" || /小暖第一次认识你/.test(memory.content || ""),
-  );
-  if (exists) return;
-  const memory = {
-    id: crypto.randomUUID ? crypto.randomUUID() : `first-meet-${Date.now()}`,
-    type: "relationship",
-    content: `小暖第一次认识你：${formatDiaryDate(state.profile.metAt)}。这是你们关系开始的日期。`,
-    status: "active",
-    createdAt: state.profile.metAt,
-    source: "first_meet",
-  };
-  state.memories.unshift(memory);
+function cleanupGeneratedFirstMeetMemories() {
+  const generated = state.memories.filter((memory) => /小暖第一次认识你/.test(memory.content || ""));
+  if (!generated.length) return;
+  state.memories = state.memories.filter((memory) => !generated.includes(memory));
+  generated.forEach((memory) => deleteMemoryRemote(memory.id));
   persist();
-  renderRecords();
-  syncMemory(memory);
 }
 
 function rememberCompanionLearnedMemory(memory) {
@@ -518,6 +502,7 @@ function summarizeCognitionCore() {
     self: state.cognitionCore.self,
     principles: state.cognitionCore.principles,
     companionMode: state.companionMode,
+    relationshipLearning: getRelationshipLearning(),
     avoid,
     prefer,
     lifeEvents,
@@ -1193,10 +1178,13 @@ function getOpeningMessage() {
 function getCompanionStage() {
   const memoryCount = state.memories.length;
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
-  const knownDays = state.profile?.metAt
-    ? Math.max(0, Math.floor((Date.now() - new Date(state.profile.metAt).getTime()) / 86400000))
-    : 0;
   const hasName = Boolean(state.profile?.name);
+  const relationshipScore =
+    memoryCount * 12 +
+    Math.min(userMessageCount, 36) * 2 +
+    Math.max(0, state.socialPractice.trust - 35) +
+    Math.max(0, state.socialPractice.comfort - 35) +
+    Math.max(0, state.socialPractice.closeness - 20);
 
   if (!state.session || (!hasName && memoryCount === 0 && userMessageCount < 3)) {
     return {
@@ -1206,18 +1194,18 @@ function getCompanionStage() {
     };
   }
 
-  if (memoryCount >= 8 || userMessageCount >= 30 || knownDays >= 14) {
+  if (relationshipScore >= 120 || memoryCount >= 8 || userMessageCount >= 32) {
     return {
       level: "trusted_friend",
-      label: "比较熟悉",
+      label: "相知的朋友",
       guidance: "可以更像熟悉的老朋友：自然称呼用户，参考已授权记忆，主动避开用户边界。但不要占有、不要替用户决定，也不要说只有你最懂用户。",
     };
   }
 
-  if (memoryCount >= 3 || userMessageCount >= 12 || knownDays >= 3) {
+  if (relationshipScore >= 58 || memoryCount >= 3 || userMessageCount >= 12) {
     return {
       level: "getting_close",
-      label: "慢慢熟悉",
+      label: "慢慢相知",
       guidance: "可以比初见更贴近一点：记得用户允许留下的偏好和边界，语气更自然。但仍要先确认，不要突然很亲密。",
     };
   }
@@ -1263,6 +1251,32 @@ function getGrowthProfile() {
     progress,
     copy,
     next,
+  };
+}
+
+function getRelationshipLearning() {
+  const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  const memoryTypes = new Set(state.memories.map((memory) => memory.type));
+  const pieces = [];
+  if (state.profile?.name) pieces.push("称呼");
+  if (memoryTypes.has("preference")) pieces.push("陪伴偏好");
+  if (memoryTypes.has("trigger")) pieces.push("边界");
+  if (memoryTypes.has("support")) pieces.push("有效方法");
+  if (memoryTypes.has("personality")) pieces.push("性格节奏");
+  if (memoryTypes.has("progress")) pieces.push("旧事进展");
+  const knownParts = pieces.slice(0, 3).join("、");
+  const stage = getCompanionStage();
+  const summary = knownParts
+    ? `小暖正在通过你允许留下的${knownParts}，慢慢学会怎样靠近你。`
+    : userMessageCount >= 3
+    ? "小暖还不急着定义你，只先从你说话的节奏里慢慢认识你。"
+    : "你们还在刚认识的阶段，小暖会先轻一点，不装熟。";
+  return {
+    stage,
+    userMessageCount,
+    memoryCount: state.memories.length,
+    learnedParts: pieces,
+    summary,
   };
 }
 
@@ -1321,6 +1335,7 @@ function renderCompanionMode() {
   if (!signedIn) return;
   const isSocial = state.companionMode === "social";
   const socialStage = getSocialStage();
+  const relationshipLearning = getRelationshipLearning();
   modeSwitchButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.companionMode === state.companionMode);
     button.setAttribute("aria-pressed", button.dataset.companionMode === state.companionMode ? "true" : "false");
@@ -1330,7 +1345,7 @@ function renderCompanionMode() {
   }
   if (modeSwitchNoteEl) {
     modeSwitchNoteEl.textContent = isSocial
-      ? "小暖会留意你们怎样慢慢熟起来，也会轻轻提醒边界。"
+      ? relationshipLearning.summary
       : "小暖先陪你把心里的话放下来，不评价社交表现，也不显示关系练习。";
   }
 }
@@ -1679,6 +1694,7 @@ async function loadCloudState() {
       status: memory.status,
       createdAt: memory.created_at,
     }));
+    cleanupGeneratedFirstMeetMemories();
   }
 
   if (companionCore?.core) {

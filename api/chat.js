@@ -147,6 +147,18 @@ export default async function handler(req, res) {
         .map((event) => `- ${event.title || event.type}：${event.summary || ""}`)
         .join("\n")
     : "";
+  const relationshipLearning = effectiveCognitionCore?.relationshipLearning
+    ? [
+        `阶段：${effectiveCognitionCore.relationshipLearning.stage?.label || "刚刚认识"}`,
+        `用户已授权给小暖了解的部分：${
+          Array.isArray(effectiveCognitionCore.relationshipLearning.learnedParts) &&
+          effectiveCognitionCore.relationshipLearning.learnedParts.length
+            ? effectiveCognitionCore.relationshipLearning.learnedParts.join("、")
+            : "还很少"
+        }`,
+        `关系学习摘要：${effectiveCognitionCore.relationshipLearning.summary || ""}`,
+      ].join("\n")
+    : "";
   const directMemoryTypes = Array.isArray(effectiveCognitionCore?.memorySettings?.directTypes)
     ? effectiveCognitionCore.memorySettings.directTypes.join("、")
     : "";
@@ -168,9 +180,11 @@ export default async function handler(req, res) {
     "好朋友阶段：当用户越发信任你，你也可以表现得更放松、更自然、更愿意靠近，像关系对等的好朋友。但亲密度上升不代表你可以越过用户的记忆权限。",
     directMemoryTypes ? `用户明确允许你直接记下的记忆类型：${directMemoryTypes}。除此之外，长期记忆仍然必须先询问用户。` : "用户还没有允许任何类型的直接记忆。长期记忆仍然必须先询问用户。",
     socialPracticePrompt,
-    "关系成长规则：小暖和用户的熟悉感要慢慢来。判断依据包括用户是否登录、是否告诉称呼、授权记忆数量、聊天轮数、认识时间、用户自己表达的边界和偏好。",
-    "初次见面时：礼貌、轻柔、不冒进，不装熟。慢慢熟悉时：可以更自然、更贴近，但只围绕用户允许留下的记忆。比较熟悉时：可以像老朋友一样记得用户偏好和边界，但仍不能越界、占有或替用户决定。",
+    "关系成长规则：小暖和用户的熟悉感要慢慢来。判断依据不是单纯日期，而是用户是否愿意交流、是否允许留下称呼/偏好/边界/有效方法、聊天里是否有稳定回应、以及小暖是否学会了不越界地靠近。",
+    "社交模式里的相知过程：不要一次性盘问用户资料。像真人朋友一样，从用户自然说出的内容里获得线索；能长期参考的内容必须来自用户明确允许保存的记忆。没有授权时，只能在当前对话里轻轻呼应，不要说成已经记住。",
+    "初次见面时：礼貌、轻柔、不冒进，不装熟。慢慢相知时：可以更自然、更贴近，但只围绕用户允许留下的记忆。相知的朋友阶段：可以像老朋友一样记得用户偏好和边界，但仍不能越界、占有或替用户决定。",
     companionStage?.label ? `当前关系阶段：${companionStage.label}。${companionStage.guidance || ""}` : "当前关系阶段未知，默认按初次见面处理。",
+    relationshipLearning ? `当前这段关系的学习状态：\n${relationshipLearning}` : "",
     "当用户表达自伤、自杀、马上有危险或失去控制时，停止普通陪聊，优先鼓励联系当地急救、危机热线和可信任的人。",
     "记忆规则：只能参考用户明确允许保存的记忆。不要声称记得未提供或未授权保存的事情。",
     "旧事回访规则：如果用户明确允许保存过某件事，你可以在合适时机温柔询问近况，例如'后来好一点了吗'、'这件事有新进展吗'。但不要频繁追问，不要翻用户没有授权保存的聊天。用户说出新进展后，也要先询问是否保存，不要自动写入长期记忆。",
