@@ -57,6 +57,7 @@ const authPanelEl = document.querySelector("#auth-panel");
 const authToggleEl = document.querySelector("#auth-toggle");
 const authFormEl = document.querySelector("#auth-form");
 const authStatusEl = document.querySelector("#auth-status");
+const googleLoginEl = document.querySelector("#google-login");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
@@ -825,6 +826,23 @@ memoryLoginButtonEl.addEventListener("click", () => {
   authPanelEl.classList.remove("hidden");
   authStatusEl.textContent = "输入邮箱后，我会发一封登录链接。登录后，小暖才会拥有账号记忆。";
   document.querySelector("#auth-email").focus();
+});
+
+googleLoginEl.addEventListener("click", async () => {
+  if (!state.supabase) {
+    authStatusEl.textContent = "当前环境还没有连上 Supabase 登录配置。请先用线上 Vercel 地址打开网站。";
+    return;
+  }
+  authStatusEl.textContent = "正在打开 Google 登录...";
+  const { error } = await state.supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${location.origin}${location.pathname}`,
+    },
+  });
+  if (error) {
+    authStatusEl.textContent = `Google 登录失败：${error.message}`;
+  }
 });
 
 authFormEl.addEventListener("submit", async (event) => {

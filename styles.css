@@ -305,6 +305,37 @@ h4 {
   box-shadow: var(--soft-shadow);
 }
 
+.google-button {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-weight: 850;
+}
+
+.google-button span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  background: #4285f4;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.google-button:hover {
+  background: #fff;
+  transform: translateY(-1px);
+}
+
 .auth-panel.hidden {
   display: none;
 }
