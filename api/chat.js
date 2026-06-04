@@ -6,6 +6,52 @@ const MODEL = process.env.QWEN_MODEL || "qwen-plus";
 const crisisPattern =
   /不想活|活不下去|想死|自杀|结束生命|伤害自己|轻生|撑不过|suicide|kill myself|end my life|self harm/i;
 
+function sendStreamEvent(res, data) {
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+async function streamQwenToClient(upstream, res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+  });
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+
+      for (const event of events) {
+        const lines = event.split("\n").filter((line) => line.startsWith("data:"));
+        for (const line of lines) {
+          const payload = line.replace(/^data:\s*/, "").trim();
+          if (!payload) continue;
+          if (payload === "[DONE]") {
+            res.write("data: [DONE]\n\n");
+            continue;
+          }
+          const data = JSON.parse(payload);
+          const delta = data?.choices?.[0]?.delta?.content || "";
+          if (delta) sendStreamEvent(res, { delta });
+        }
+      }
+    }
+    res.write("data: [DONE]\n\n");
+  } catch (error) {
+    sendStreamEvent(res, { error: error.message || "Stream failed" });
+  } finally {
+    res.end();
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -18,7 +64,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { message, profile, memories = [], history = [] } = req.body || {};
+  const { message, profile, memories = [], history = [], stream = false } = req.body || {};
   if (!message || typeof message !== "string") {
     res.status(400).json({ error: "Missing message" });
     return;
@@ -97,12 +143,18 @@ export default async function handler(req, res) {
       ],
       temperature: 0.78,
       max_tokens: 420,
+      stream,
     }),
   });
 
   if (!upstream.ok) {
     const errorText = await upstream.text();
     res.status(502).json({ error: "Qwen request failed", detail: errorText.slice(0, 500) });
+    return;
+  }
+
+  if (stream && upstream.body) {
+    await streamQwenToClient(upstream, res);
     return;
   }
 

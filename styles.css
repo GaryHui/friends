@@ -558,6 +558,30 @@ h4 {
   border-color: rgba(201, 122, 104, 0.28);
 }
 
+.memory-login-note {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  color: rgba(94, 69, 52, 0.82);
+  background: rgba(255, 247, 232, 0.72);
+  border: 1px solid rgba(127, 95, 70, 0.14);
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-login-note.hidden {
+  display: none;
+}
+
+.memory-login-note .text-button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .thinking {
   margin: 0 0 10px 4px;
   color: rgba(117, 111, 104, 0.86);
@@ -1026,6 +1050,11 @@ select:focus {
 
   .memory-request {
     grid-template-columns: 1fr;
+  }
+
+  .memory-login-note {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .memory-actions {

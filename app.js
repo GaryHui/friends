@@ -9,6 +9,7 @@ const state = {
   session: null,
   breathTimer: null,
   breathIndex: 0,
+  memoryLoginNoticeShown: localStorage.getItem("nuanyou-memory-login-notice") === "1",
 };
 
 const responses = {
@@ -48,6 +49,8 @@ const authToggleEl = document.querySelector("#auth-toggle");
 const authFormEl = document.querySelector("#auth-form");
 const authStatusEl = document.querySelector("#auth-status");
 const thinkingEl = document.querySelector("#thinking");
+const memoryLoginNoteEl = document.querySelector("#memory-login-note");
+const memoryLoginButtonEl = document.querySelector("#memory-login-button");
 
 function persist() {
   localStorage.setItem("nuanyou-tone", state.tone);
@@ -57,7 +60,8 @@ function persist() {
   localStorage.setItem("nuanyou-moods", JSON.stringify(state.moods));
 }
 
-function addMessage(role, text, kind = "") {
+function createMessage(role, text, kind = "", options = {}) {
+  const { persistNow = true, syncNow = true } = options;
   const message = {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     role,
@@ -66,10 +70,26 @@ function addMessage(role, text, kind = "") {
     at: new Date().toISOString(),
   };
   state.messages.push(message);
-  persist();
+  if (persistNow) persist();
   renderMessages();
-  renderRecords();
-  syncMessage(message);
+  if (persistNow) renderRecords();
+  if (syncNow) syncMessage(message);
+  return message;
+}
+
+function addMessage(role, text, kind = "") {
+  return createMessage(role, text, kind);
+}
+
+function updateMessage(message, text, options = {}) {
+  const { persistNow = false, syncNow = false } = options;
+  message.text = text;
+  renderMessages();
+  if (persistNow) {
+    persist();
+    renderRecords();
+  }
+  if (syncNow) syncMessage(message);
 }
 
 function renderMessages() {
@@ -97,6 +117,19 @@ function renderMessages() {
 
 function setThinking(isThinking) {
   thinkingEl.classList.toggle("hidden", !isThinking);
+}
+
+function shouldShowMemoryLoginNotice() {
+  return state.supabase && !state.session && !state.memoryLoginNoticeShown;
+}
+
+function showMemoryLoginNotice() {
+  state.memoryLoginNoticeShown = true;
+  localStorage.setItem("nuanyou-memory-login-notice", "1");
+  addMessage(
+    "friend",
+    "先轻轻提醒你一下：如果现在没有登录，我可以陪你聊，但这些长期记忆不会同步到你的账号里。等你愿意让小暖下次也认出你、记得你授权留下的事，可以点右上角“登录”建立档案；你仍然可以随时删除记录。",
+  );
 }
 
 function formatTime(value) {
@@ -187,10 +220,12 @@ function updateAuthUi() {
   if (!state.supabase) {
     authToggleEl.textContent = "本地";
     authToggleEl.disabled = true;
+    memoryLoginNoteEl.classList.remove("hidden");
     return;
   }
   authToggleEl.textContent = state.session ? "退出" : "登录";
   authStatusEl.textContent = state.session ? "已登录，记录会同步到你的账号。" : "";
+  memoryLoginNoteEl.classList.toggle("hidden", Boolean(state.session));
 }
 
 async function loadCloudState() {
@@ -396,7 +431,45 @@ function showCrisisSupport() {
   pageTitleEl.textContent = "先保护你自己";
 }
 
-async function getAiReply(text) {
+function readJsonError(response, fallbackStatus) {
+  return response
+    .json()
+    .catch(() => null)
+    .then((data) => data || { error: fallbackStatus });
+}
+
+async function readStreamReply(response, onDelta) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+
+    for (const event of events) {
+      const lines = event.split("\n").filter((line) => line.startsWith("data:"));
+      for (const line of lines) {
+        const payload = line.replace(/^data:\s*/, "").trim();
+        if (!payload || payload === "[DONE]") continue;
+        const data = JSON.parse(payload);
+        if (data.error) throw new Error(data.error);
+        if (data.delta) {
+          fullText += data.delta;
+          onDelta(data.delta, fullText);
+        }
+      }
+    }
+  }
+
+  return fullText;
+}
+
+async function getAiReply(text, onDelta) {
   if (location.protocol === "file:") {
     return makeReply(text);
   }
@@ -419,14 +492,21 @@ async function getAiReply(text) {
         profile: state.profile,
         memories: state.memories.slice(0, 20),
         history,
+        stream: true,
       }),
     });
 
-    const data = await response.json();
     if (!response.ok) {
+      const data = await readJsonError(response, response.status);
       return `小暖现在还没有连上真正的 AI。\n\n接口返回：${data.error || response.status}\n${data.detail ? `\n细节：${data.detail}` : ""}\n\n你可以先检查 Vercel 环境变量里有没有 DASHSCOPE_API_KEY、QWEN_BASE_URL、QWEN_MODEL。`;
     }
 
+    if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+      const streamed = await readStreamReply(response, onDelta);
+      return streamed || makeReply(text);
+    }
+
+    const data = await response.json();
     return data.reply || makeReply(text);
   } catch {
     return "小暖现在连不上后端接口，所以暂时只能用本地预设回复。请检查 Vercel 是否成功部署了 `/api/chat`，以及浏览器 Network 里 `/api/chat` 是否返回 200。";
@@ -441,6 +521,9 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   addMessage("user", text);
   inputEl.value = "";
   setThinking(true);
+  if (shouldShowMemoryLoginNotice()) {
+    showMemoryLoginNotice();
+  }
   const memoryCandidate = detectMemoryCandidate(text);
 
   window.setTimeout(async () => {
@@ -448,8 +531,19 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
       if (hasCrisisLanguage(text)) {
         showCrisisSupport();
       } else {
-        const reply = await getAiReply(text);
-        addMessage("friend", reply);
+        let streamedMessage = null;
+        const reply = await getAiReply(text, (_delta, fullText) => {
+          if (!streamedMessage) {
+            setThinking(false);
+            streamedMessage = createMessage("friend", "", "", { persistNow: false, syncNow: false });
+          }
+          updateMessage(streamedMessage, fullText);
+        });
+        if (streamedMessage) {
+          updateMessage(streamedMessage, reply, { persistNow: true, syncNow: true });
+        } else {
+          addMessage("friend", reply);
+        }
         if (memoryCandidate) {
           showMemoryRequest(memoryCandidate);
         }
@@ -567,6 +661,17 @@ authToggleEl.addEventListener("click", async () => {
     return;
   }
   authPanelEl.classList.toggle("hidden");
+});
+
+memoryLoginButtonEl.addEventListener("click", () => {
+  if (!state.supabase) {
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "当前环境还没有连上 Supabase 登录配置；部署到 Vercel 并设置 Supabase 变量后，这里就可以发送邮箱登录链接。";
+    return;
+  }
+  authPanelEl.classList.remove("hidden");
+  authStatusEl.textContent = "输入邮箱后，我会发一封登录链接。登录后，小暖才会拥有账号记忆。";
+  document.querySelector("#auth-email").focus();
 });
 
 authFormEl.addEventListener("submit", async (event) => {
@@ -733,6 +838,7 @@ document.querySelectorAll("#step-grid button").forEach((button) => {
 renderMessages();
 renderMoods();
 renderRecords();
+updateAuthUi();
 initSupabase();
 
 if (state.profile) {
