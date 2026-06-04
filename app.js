@@ -262,6 +262,7 @@ const socialCardEl = document.querySelector("#social-card");
 const socialStageEl = document.querySelector("#social-stage");
 const socialCopyEl = document.querySelector("#social-copy");
 const socialModeToggleEl = document.querySelector("#social-mode-toggle");
+const relationshipActionButtons = document.querySelectorAll("[data-relationship-action]");
 const socialFeedbackEl = document.querySelector("#social-feedback");
 const trustMeterEl = document.querySelector("#trust-meter");
 const comfortMeterEl = document.querySelector("#comfort-meter");
@@ -668,6 +669,21 @@ function learnFromUserFeedback(text) {
   }
   if (/舒服|有用|好多了|被理解|像朋友|这样很好|喜欢这样/.test(text)) {
     addUniqueLearning("prefer", "这种更像朋友的短句、陪伴和轻轻接话对用户更有帮助。");
+  }
+  if (/刚才小暖这样陪我会更舒服|小暖这样陪我会更舒服|这样陪我会更舒服|我希望小暖以后这样陪我/.test(text)) {
+    addUniqueLearning("prefer", "用户主动校准了陪伴方式；小暖以后要把这种说法当成更靠近用户的方式。");
+    growRelationshipFromAction({
+      trust: 3,
+      comfort: 3,
+      closeness: 2,
+      feedback: "小暖收到了你的校准。你愿意告诉她怎样更舒服，这本身就在让关系变得更可靠。",
+      event: {
+        type: "relationship_feedback",
+        title: "一次关系校准",
+        summary: "用户告诉小暖怎样陪会更舒服。小暖把这当成靠近用户的一次重要学习。",
+        source: "user_feedback",
+      },
+    });
   }
   if (/心口不一|嘴硬|说没事|其实难受|不想承认/.test(text)) {
     addUniqueLearning("prefer", "用户可能心口不一；听见'没事'时不要立刻当真，也不要拆穿，先温柔留出口。");
@@ -1373,6 +1389,8 @@ function getRelationshipMoments() {
   const allowedTypes = new Set([
     "first_meet",
     "companion_mode",
+    "shared_ritual",
+    "relationship_feedback",
     "user_allowed_memory",
     "memory_permission",
     "social_practice",
@@ -1852,6 +1870,65 @@ function updateSocialPracticeFromUser(text) {
   persist();
   renderSocialPractice();
   saveCognitionCore();
+}
+
+function growRelationshipFromAction({ trust = 0, comfort = 0, closeness = 0, feedback, event }) {
+  if (!state.session || !isRelationshipCompanionActive()) return;
+  state.socialPractice.enabled = true;
+  state.socialPractice.trust = clampScore(state.socialPractice.trust + trust);
+  state.socialPractice.comfort = clampScore(state.socialPractice.comfort + comfort);
+  state.socialPractice.closeness = clampScore(state.socialPractice.closeness + closeness);
+  state.socialPractice.lastFeedback = feedback || state.socialPractice.lastFeedback;
+  state.cognitionCore.socialPractice = {
+    enabled: state.socialPractice.enabled,
+    trust: state.socialPractice.trust,
+    comfort: state.socialPractice.comfort,
+    closeness: state.socialPractice.closeness,
+    lastFeedback: state.socialPractice.lastFeedback,
+  };
+  if (event) addCompanionLifeEvent(event);
+  persist();
+  renderSocialPractice();
+  renderRelationshipNote();
+  renderRecords();
+  saveCognitionCore();
+}
+
+function startRelationshipAction(action) {
+  if (!state.session) {
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "登录后，小暖和你的关系成长才会留到下次。";
+    return;
+  }
+
+  const starters = {
+    boundary: "我希望小暖记住一个相处边界：",
+    preference: "我希望小暖以后这样陪我：",
+    feedback: "刚才小暖这样陪我会更舒服：",
+  };
+  if (starters[action]) {
+    inputEl.value = starters[action];
+    inputEl.focus();
+    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+    handleInputActivity();
+    return;
+  }
+
+  if (action === "ritual") {
+    growRelationshipFromAction({
+      trust: 2,
+      comfort: 4,
+      closeness: 3,
+      feedback: "你们完成了一次很小的共同约定。关系不是一下子变亲密，是这样一点点有了共同经历。",
+      event: {
+        type: "shared_ritual",
+        title: "一次共同小约定",
+        summary: "用户和小暖一起把今晚的一小步完成了。小暖会把这种轻轻陪着做完的方式记成自己的经验。",
+        source: "relationship_action",
+      },
+    });
+    addMessage("friend", "好，这算我们今晚一起完成的一小步。不是很大的事，但关系有时候就是靠这种小小的共同经历慢慢变熟。", "soft-nudge");
+  }
 }
 
 function renderRelationshipNote() {
@@ -2878,6 +2955,12 @@ socialModeToggleEl.addEventListener("click", () => {
   renderMemoryPermissionSettings();
   saveCognitionCore();
   addMessage("friend", state.socialPractice.lastFeedback, "soft-nudge");
+});
+
+relationshipActionButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    startRelationshipAction(button.dataset.relationshipAction);
+  });
 });
 
 memoryPermissionInputs.forEach((input) => {

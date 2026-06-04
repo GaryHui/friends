@@ -1168,6 +1168,30 @@ h4 {
   transition: width 0.35s ease;
 }
 
+.relationship-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.relationship-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  color: rgba(93, 73, 56, 0.82);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(128, 100, 77, 0.14);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.relationship-actions button:hover {
+  color: var(--moss);
+  background: rgba(237, 244, 238, 0.78);
+  border-color: rgba(93, 118, 107, 0.2);
+}
+
 .privacy-timer {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
