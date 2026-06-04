@@ -459,6 +459,15 @@ document.querySelector("#clear-chat").addEventListener("click", () => {
 
 document.querySelector("#remember-yes").addEventListener("click", () => {
   if (!state.pendingMemory) return;
+  if (state.supabase && !state.session) {
+    addMessage(
+      "friend",
+      "我可以先陪你聊，但如果你希望我下次也记得这件事，需要先用邮箱登录建立你的档案。登录后，你仍然可以随时删除这条记忆。",
+    );
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "登录后再点“记住”，我才会把这件事放进你的长期记忆。";
+    return;
+  }
   const memory = {
     ...state.pendingMemory,
     status: "active",
