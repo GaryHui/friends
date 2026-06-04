@@ -375,6 +375,21 @@
                 <section class="diary-page diary-left-page">
                   <p class="eyebrow">目录和便签</p>
                   <div class="diary-memory-block">
+                    <form class="manual-memory-form" id="manual-memory-form">
+                      <label>
+                        手动写一条想让小暖记住的事
+                        <textarea id="manual-memory-input" placeholder="例如：我不喜欢被说教，难过时希望先被听见。" rows="3"></textarea>
+                      </label>
+                      <div class="manual-memory-actions">
+                        <select id="manual-memory-type" aria-label="记忆类型">
+                          <option value="preference">陪伴偏好</option>
+                          <option value="personality">性格与节奏</option>
+                          <option value="trigger">边界和触发点</option>
+                          <option value="support">有效的方法</option>
+                        </select>
+                        <button class="primary-button" type="submit">放进收纳箱</button>
+                      </div>
+                    </form>
                     <p class="eyebrow">待你决定的记忆</p>
                     <div class="memory-inbox" id="memory-inbox"></div>
                     <p class="eyebrow">小暖夹在本子里的便签</p>

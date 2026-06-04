@@ -1470,6 +1470,46 @@ select:focus {
   margin-bottom: 16px;
 }
 
+.manual-memory-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 247, 232, 0.68);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.manual-memory-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--tea-dark);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.manual-memory-form textarea,
+.manual-memory-form select {
+  width: 100%;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  line-height: 1.6;
+}
+
+.manual-memory-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.manual-memory-actions .primary-button {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
 .memory-candidate {
   display: grid;
   gap: 10px;

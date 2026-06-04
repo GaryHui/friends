@@ -14,6 +14,7 @@ const state = {
   diaryPageIndex: 0,
   selectedDiaryMessages: new Set(),
   memoryLoginNoticeShown: localStorage.getItem("nuanyou-memory-login-notice") === "1",
+  memoryInboxPromptedCount: 0,
   privacyTimeoutSeconds: Number(localStorage.getItem("nuanyou-privacy-timeout") || "120"),
   privacyDeadline: Date.now() + Number(localStorage.getItem("nuanyou-privacy-timeout") || "120") * 1000,
 };
@@ -50,6 +51,9 @@ const memoryRequestEl = document.querySelector("#memory-request");
 const memoryTextEl = document.querySelector("#memory-text");
 const memoryListEl = document.querySelector("#memory-list");
 const memoryInboxEl = document.querySelector("#memory-inbox");
+const manualMemoryFormEl = document.querySelector("#manual-memory-form");
+const manualMemoryInputEl = document.querySelector("#manual-memory-input");
+const manualMemoryTypeEl = document.querySelector("#manual-memory-type");
 const diaryClosedEl = document.querySelector("#diary-closed");
 const diaryOpenEl = document.querySelector("#diary-open");
 const diaryBookEl = document.querySelector("#diary-book");
@@ -777,8 +781,22 @@ function addMemoryCandidate(candidate) {
   renderRecords();
 }
 
+function maybePromptMemoryInbox() {
+  const count = state.memoryCandidates.length;
+  if (!state.session || count < 2 || count === state.memoryInboxPromptedCount) return false;
+  state.memoryInboxPromptedCount = count;
+  addMessage(
+    "friend",
+    count === 2
+      ? "刚刚有两件事，也许能帮助我以后更懂你。我没有替你记下来，只是放进了记忆收纳箱。你愿意的时候，可以去记录页决定哪些可以留下。"
+      : `记忆收纳箱里现在有 ${count} 条待你决定的事。我先不打断你，等你想整理的时候，它们都在记录页里。`,
+  );
+  return true;
+}
+
 function removeMemoryCandidate(candidateId) {
   state.memoryCandidates = state.memoryCandidates.filter((candidate) => candidate.id !== candidateId);
+  state.memoryInboxPromptedCount = Math.min(state.memoryInboxPromptedCount, state.memoryCandidates.length);
   persist();
   renderRecords();
 }
@@ -1052,7 +1070,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         } else if (memoryCandidate) {
           if (state.session) {
             addMemoryCandidate(memoryCandidate);
-            addMessage("friend", "这句话里有一点也许能帮助我以后更懂你。我先不替你决定，已经轻轻放进“记忆收纳箱”了。等你愿意时，你可以自己看看要不要留下。");
+            maybePromptMemoryInbox();
           } else {
             addMessage("friend", "这句话像是值得以后记住的事。不过现在是随便聊聊，我不会留下记录。等你登录后，可以自己决定哪些事放进记忆。");
           }
@@ -1417,6 +1435,21 @@ document.querySelector("#records-view").addEventListener("change", (event) => {
   if (messageId) {
     toggleDiaryMessage(messageId, event.target.checked);
   }
+});
+
+manualMemoryFormEl.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const content = manualMemoryInputEl.value.trim();
+  if (!content) return;
+  addMemoryCandidate({
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    type: manualMemoryTypeEl.value,
+    content,
+    prompt: "",
+    createdAt: new Date().toISOString(),
+  });
+  manualMemoryInputEl.value = "";
+  addMessage("friend", "好，我先把这条放进收纳箱。你再看一眼，确认后我才会真的记住。");
 });
 
 const moodRange = document.querySelector("#mood-range");
