@@ -156,7 +156,7 @@ export default async function handler(req, res) {
         ? effectiveCognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n")
         : "";
   const nudgeLearning = effectiveNudgeStats ? JSON.stringify(effectiveNudgeStats).slice(0, 900) : "";
-  const requestedCompanionMode = ["social", "romance"].includes(companionMode) ? companionMode : "support";
+  const requestedCompanionMode = ["relationship", "social", "romance"].includes(companionMode) ? companionMode : "support";
   const effectiveProductVariant = productVariant === "overseas" ? "overseas" : "domestic";
   const trimmedMessage = message.trim();
   const isShortCasualMessage = trimmedMessage.length <= 14 && !/[？?]|为什么|怎么办|难受|崩溃|孤独|孤单|想死|自杀/.test(trimmedMessage);
@@ -175,8 +175,10 @@ export default async function handler(req, res) {
   ]
     .filter(Boolean)
     .join("\n");
-  const socialPracticePrompt = ["social", "romance"].includes(requestedCompanionMode) && socialPractice?.enabled
-    ? `相遇练习模式已开启。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。你可以更像一个有边界的新朋友，表现出放松、迟疑、愿意多聊或轻轻后退。反馈用户社交方式时要自然，不要像打分系统；不要说“好感+5”。可以表达“这句话让我放松了一点”“这样推进太快，我会想退一步”。`
+  const socialPracticePrompt = ["relationship", "social", "romance"].includes(requestedCompanionMode) && socialPractice?.enabled
+    ? requestedCompanionMode === "relationship"
+      ? `陪伴关系正在成长。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。这些数值只用于调整你的语气和靠近程度，不要直接告诉用户分数，不要说“好感+5”。你可以更自然地表现出熟悉、安心或轻轻靠近。`
+      : `相遇练习模式已开启。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。你可以更像一个有边界的新朋友，表现出放松、迟疑、愿意多聊或轻轻后退。反馈用户社交方式时要自然，不要像打分系统；不要说“好感+5”。可以表达“这句话让我放松了一点”“这样推进太快，我会想退一步”。`
     : "";
   const companionLifeEvents = Array.isArray(effectiveCognitionCore?.lifeEvents)
     ? effectiveCognitionCore.lifeEvents
@@ -219,6 +221,8 @@ export default async function handler(req, res) {
       ? effectiveProductVariant === "overseas"
         ? "当前是海外版 Date mode：用户期待更直接的 AI girlfriend / boyfriend 体验。你可以更主动、更暧昧、更像虚拟伴侣，但仍必须尊重同意、年龄安全、隐私和平台边界，不要制造现实依赖或声称自己是真人。"
         : "当前是国内版心动模式：用户希望更快获得被在意、被靠近、被温柔喜欢的感觉。你可以更甜、更主动一点，但要有边界，不要露骨，不要承诺现实恋爱，不要制造'只有我懂你'的依赖。"
+    : effectiveCompanionMode === "relationship"
+      ? "当前是国内版统一陪伴关系：不要把体验拆成倾诉、社交或心动。小暖从陪用户说话开始，慢慢形成信任、安心和亲近；可以有温柔的在意和关系成长，但不做模式说明、不做打分口吻、不制造依赖。"
     : effectiveCompanionMode === "social"
       ? "当前是社交模式：用户希望和小暖练习如何相遇、建立信任、尊重边界并慢慢成为好朋友。你可以更有自己的边界和偏好，但必须温柔、克制、非恋爱化，不要制造依赖。"
       : "当前是倾诉模式：用户主要需要被听见、被接住、被稳定陪伴。不要主动做社交评分、关系推进或亲密度反馈；除非用户主动问社交建议，否则先像一个安静可靠的倾听对象。";

@@ -282,6 +282,33 @@ function getProductConfig() {
   return productVariants[state.productVariant] || productVariants.domestic;
 }
 
+function isDomesticVariant() {
+  return state.productVariant !== "overseas";
+}
+
+function isRelationshipCompanionActive() {
+  return Boolean(state.session) && (isDomesticVariant() || ["relationship", "social", "romance"].includes(state.companionMode));
+}
+
+function normalizeCompanionStateForProduct(options = {}) {
+  if (!state.session || !isDomesticVariant()) return;
+  state.companionMode = "relationship";
+  state.socialPractice.enabled = true;
+  state.cognitionCore.companionMode = state.companionMode;
+  state.cognitionCore.socialPractice = {
+    enabled: state.socialPractice.enabled,
+    trust: state.socialPractice.trust,
+    comfort: state.socialPractice.comfort,
+    closeness: state.socialPractice.closeness,
+    lastFeedback: state.socialPractice.lastFeedback,
+  };
+  if (!options.localOnly) saveCognitionCore();
+}
+
+function getApiCompanionMode() {
+  return isDomesticVariant() && state.session ? "relationship" : state.companionMode;
+}
+
 function applyProductConfig() {
   const config = getProductConfig();
   document.title = `${config.brand} | ${state.productVariant === "overseas" ? "AI companion" : "有人听你说话"}`;
@@ -1613,9 +1640,13 @@ function getSocialStage() {
 function renderCompanionMode() {
   const signedIn = Boolean(state.session);
   if (modeSwitchEl) {
-    modeSwitchEl.classList.toggle("hidden", !signedIn);
+    modeSwitchEl.classList.toggle("hidden", !signedIn || isDomesticVariant());
   }
   if (!signedIn) return;
+  if (isDomesticVariant()) {
+    normalizeCompanionStateForProduct({ localOnly: true });
+    return;
+  }
   const config = getProductConfig();
   const isSocial = state.companionMode === "social";
   const isRomance = state.companionMode === "romance";
@@ -1673,13 +1704,17 @@ function setCompanionMode(mode, options = {}) {
 function renderSocialPractice() {
   if (!socialCardEl || !socialStageEl || !socialCopyEl || !socialModeToggleEl) return;
   const signedIn = Boolean(state.session);
-  const visible = signedIn && (state.companionMode === "social" || state.companionMode === "romance");
+  const visible = signedIn && (isDomesticVariant() || ["social", "romance", "relationship"].includes(state.companionMode));
   socialCardEl.classList.toggle("hidden", !visible);
   if (!visible) return;
+  if (isDomesticVariant() && !state.socialPractice.enabled) {
+    state.socialPractice.enabled = true;
+  }
   const stage = getSocialStage();
   socialCardEl.classList.toggle("active", state.socialPractice.enabled);
   socialStageEl.textContent = stage.label;
   socialCopyEl.textContent = stage.copy;
+  socialModeToggleEl.classList.toggle("hidden", isDomesticVariant());
   socialModeToggleEl.textContent = state.socialPractice.enabled ? "暂停" : "继续";
   if (!state.socialPractice.enabled && /讨好|社交能力|相遇练习/.test(state.socialPractice.lastFeedback || "")) {
     state.socialPractice.lastFeedback = "亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。";
@@ -1693,7 +1728,7 @@ function renderSocialPractice() {
 function canUseDirectMemory() {
   return (
     state.session &&
-    (state.companionMode === "social" || state.companionMode === "romance") &&
+    isRelationshipCompanionActive() &&
     state.socialPractice.enabled &&
     state.socialPractice.trust >= 60 &&
     state.socialPractice.comfort >= 58 &&
@@ -1721,7 +1756,7 @@ function canDirectlyRememberType(type) {
 function renderMemoryPermissionSettings() {
   if (!memoryPermissionCardEl) return;
   const signedIn = Boolean(state.session);
-  const visible = signedIn && (state.companionMode === "social" || state.companionMode === "romance");
+  const visible = signedIn && (isDomesticVariant() || ["social", "romance", "relationship"].includes(state.companionMode));
   memoryPermissionCardEl.classList.toggle("hidden", !visible);
   if (!visible) return;
   const unlocked = canUseDirectMemory();
@@ -1747,7 +1782,7 @@ function renderMemoryPermissionSettings() {
 }
 
 function updateSocialPracticeFromUser(text) {
-  if (!state.session || !["social", "romance"].includes(state.companionMode) || !state.socialPractice.enabled) return;
+  if (!state.session || !isRelationshipCompanionActive() || !state.socialPractice.enabled) return;
   const clean = text.trim();
   if (!clean) return;
   let trustDelta = 0;
@@ -1822,7 +1857,7 @@ function updateSocialPracticeFromUser(text) {
 function renderRelationshipNote() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
-  const visible = Boolean(state.session) && (state.companionMode === "social" || state.companionMode === "romance");
+  const visible = isRelationshipCompanionActive();
   relationshipNoteEl.classList.add("hidden");
   if (!visible) {
     renderGrowthCard();
@@ -2022,15 +2057,22 @@ async function loadCloudState() {
       lifeEvents: companionCore.core.lifeEvents || [],
     };
     state.nudgeStats = companionCore.nudge_stats || {};
-    state.companionMode = ["social", "romance"].includes(companionCore.core.companionMode) ? companionCore.core.companionMode : "support";
+    state.companionMode = ["relationship", "social", "romance"].includes(companionCore.core.companionMode)
+      ? companionCore.core.companionMode
+      : "support";
     state.socialPractice = {
       ...state.socialPractice,
       ...(companionCore.core.socialPractice || {}),
     };
-    state.socialPractice.enabled = ["social", "romance"].includes(state.companionMode) && state.socialPractice.enabled !== false;
+    if (isDomesticVariant()) {
+      normalizeCompanionStateForProduct({ localOnly: true });
+    } else {
+      state.socialPractice.enabled = ["social", "romance"].includes(state.companionMode) && state.socialPractice.enabled !== false;
+    }
     saveCognitionCore({ localOnly: true });
     saveNudgeStats({ localOnly: true });
   } else {
+    normalizeCompanionStateForProduct({ localOnly: true });
     await saveCognitionCoreRemote();
   }
   ensureCompanionFirstMeet();
@@ -2492,7 +2534,7 @@ async function getAiReply(text, onDelta) {
         memories: state.memories.slice(0, 20),
         companionStage: getCompanionStage(),
         productVariant: state.productVariant,
-        companionMode: state.companionMode,
+        companionMode: getApiCompanionMode(),
         cognitionCore: summarizeCognitionCore(),
         socialPractice: state.socialPractice,
         history,
