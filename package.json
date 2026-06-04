@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "vercel dev",
-    "check": "node --check app.js && node --check api/chat.js && node --check api/config.js"
+    "check": "node --check app.js && node --check api/chat.js && node --check api/config.js && node --check api/lesson-draft.js && node --check api/lessons.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0"

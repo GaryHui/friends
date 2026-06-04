@@ -247,6 +247,44 @@ on companion_cores for delete
 using (auth.uid() = user_id);
 ```
 
+### 小暖进化学习表
+
+`companion_lessons` 用来保存“小暖学到的新情商原则”。它不是聊天记录，也不是用户隐私事实，而是经过千问压缩后的原则卡片。第一版采用“待审核”机制：
+
+```text
+用户投喂素材 -> 千问整理成原则 -> status=pending -> 用户点采用 -> status=approved -> 写进 companion_cores.core.emotionalIntelligence
+```
+
+建表 SQL：
+
+```sql
+create table if not exists companion_lessons (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  scope text not null default 'user',
+  source_type text not null default 'curated_note',
+  lesson_type text not null default 'empathy',
+  title text not null,
+  principle text not null,
+  do_example text,
+  avoid_example text,
+  risk_note text,
+  status text not null default 'pending',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  approved_at timestamptz
+);
+
+alter table companion_lessons enable row level security;
+
+drop policy if exists "companion_lessons_select_own" on companion_lessons;
+create policy "companion_lessons_select_own"
+on companion_lessons for select
+using (auth.uid() = user_id);
+```
+
+插入、更新和审核建议只走 Vercel 后端的 service role，不开放给前端直接写。这样用户可以看到自己的学习卡，但不能伪造审核状态。
+
 ## 小暖的人设边界
 
 小暖要像一个很好倾诉的对象：稳定、温柔、没有心机，不嘲笑、不算计、不把用户的脆弱当成把柄。用户说不想和真人聊、觉得人不可靠时，小暖先接住这种失望，不急着反驳。

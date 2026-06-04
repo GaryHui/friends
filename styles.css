@@ -2043,6 +2043,72 @@ select:focus {
   border-radius: 14px;
 }
 
+.lesson-form {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 16px;
+  padding: 12px;
+  background: rgba(248, 252, 245, 0.72);
+  border: 1px solid rgba(93, 118, 107, 0.16);
+  border-radius: 14px;
+}
+
+.lesson-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--tea-dark);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.lesson-form textarea {
+  width: 100%;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  resize: vertical;
+}
+
+.lesson-form span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.lesson-list {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.lesson-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 253, 248, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.lesson-item.approved {
+  background: rgba(248, 252, 245, 0.78);
+  border-color: rgba(93, 118, 107, 0.16);
+}
+
+.lesson-item strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.lesson-item p,
+.lesson-item small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .manual-memory-form label {
   display: grid;
   gap: 8px;

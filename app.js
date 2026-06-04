@@ -177,6 +177,7 @@ const state = {
   profile: JSON.parse(localStorage.getItem("nuanyou-profile") || "null"),
   memories: JSON.parse(localStorage.getItem("nuanyou-memories") || "[]"),
   memoryCandidates: [],
+  lessons: [],
   pendingMemory: null,
   messages: [],
   moods: [],
@@ -268,6 +269,10 @@ const memoryPermissionInputs = document.querySelectorAll(".memory-permission-lis
 const manualMemoryFormEl = document.querySelector("#manual-memory-form");
 const manualMemoryInputEl = document.querySelector("#manual-memory-input");
 const manualMemoryTypeEl = document.querySelector("#manual-memory-type");
+const lessonFormEl = document.querySelector("#lesson-form");
+const lessonInputEl = document.querySelector("#lesson-input");
+const lessonStatusEl = document.querySelector("#lesson-status");
+const lessonListEl = document.querySelector("#lesson-list");
 const diaryClosedEl = document.querySelector("#diary-closed");
 const diaryOpenEl = document.querySelector("#diary-open");
 const diaryBookEl = document.querySelector("#diary-book");
@@ -417,6 +422,7 @@ function resetPrivateStateForAccount() {
   state.profile = null;
   state.memories = [];
   state.memoryCandidates = [];
+  state.lessons = [];
   state.messages = [];
   state.moods = [];
   state.pendingMemory = null;
@@ -1292,6 +1298,18 @@ function getMemoryTypeLabel(type) {
   );
 }
 
+function getLessonTypeLabel(type) {
+  return (
+    {
+      empathy: "共情",
+      romance: "亲密",
+      boundary: "边界",
+      conversation: "接话",
+      safety: "安全",
+    }[type] || "情商"
+  );
+}
+
 function formatDiaryDate(value) {
   return new Date(value).toLocaleDateString("zh-CN", {
     year: "numeric",
@@ -1347,6 +1365,7 @@ function clampDiaryPage() {
 function renderRecords() {
   memoryListEl.innerHTML = "";
   memoryInboxEl.innerHTML = "";
+  if (lessonListEl) lessonListEl.innerHTML = "";
   if (relationshipMomentsEl) relationshipMomentsEl.innerHTML = "";
   const hasDiaryAccess = Boolean(state.session);
   recordsLoginGateEl.classList.toggle("hidden", hasDiaryAccess);
@@ -1358,11 +1377,14 @@ function renderRecords() {
   if (!hasDiaryAccess) {
     memoryListEl.innerHTML = '<p class="muted">还没有开启账号记忆。随便聊聊时，小暖不会留下日记本。</p>';
     memoryInboxEl.innerHTML = "";
+    if (lessonListEl) lessonListEl.innerHTML = "";
     if (relationshipMomentsEl) relationshipMomentsEl.innerHTML = "";
     diaryDaysEl.innerHTML = "";
     diaryEntryListEl.innerHTML = "";
     return;
   }
+
+  renderLessons();
 
   if (state.memoryCandidates.length === 0) {
     memoryInboxEl.innerHTML = '<p class="muted">还没有待确认的记忆。小暖会把不太适合打断你的内容先放到这里。</p>';
@@ -1445,6 +1467,39 @@ function renderRecords() {
       </div>
     `;
     diaryEntryListEl.appendChild(item);
+  });
+}
+
+function renderLessons() {
+  if (!lessonListEl) return;
+  const lessons = state.lessons || [];
+  if (!lessons.length) {
+    lessonListEl.innerHTML = '<p class="muted">还没有待审核原则。你可以先投喂一段素材，让千问整理。</p>';
+    return;
+  }
+  lessonListEl.innerHTML = "";
+  lessons.forEach((lesson) => {
+    const item = document.createElement("article");
+    item.className = `lesson-item ${lesson.status === "approved" ? "approved" : ""}`.trim();
+    item.innerHTML = `
+      <div class="record-meta">
+        <span>${getLessonTypeLabel(lesson.lessonType)} · ${lesson.status === "approved" ? "已采用" : "待审核"}</span>
+      </div>
+      <strong>${lesson.title}</strong>
+      <p>${lesson.principle}</p>
+      <small>小暖应该：${lesson.doExample}</small>
+      <small>避免：${lesson.avoidExample}</small>
+      <small>风险：${lesson.riskNote}</small>
+      ${
+        lesson.status === "pending"
+          ? `<div class="memory-candidate-actions">
+              <button class="primary-button" data-lesson-approve="${lesson.id}" type="button">采用</button>
+              <button class="ghost-button" data-lesson-reject="${lesson.id}" type="button">不要</button>
+            </div>`
+          : ""
+      }
+    `;
+    lessonListEl.appendChild(item);
   });
 }
 
@@ -2277,6 +2332,60 @@ async function loadCloudState() {
   renderMessages();
   renderRecords();
   renderMoods();
+  loadLessons();
+}
+
+async function loadLessons() {
+  if (!state.session) return;
+  const accessToken = state.session?.access_token;
+  if (!accessToken) return;
+  try {
+    const response = await fetch("/api/lessons", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    state.lessons = data.lessons || [];
+    renderLessons();
+  } catch {
+    // Lessons are an enhancement; chat should keep working if the table is not ready.
+  }
+}
+
+async function updateLessonStatus(lessonId, status) {
+  const accessToken = state.session?.access_token;
+  if (!accessToken) return null;
+  const response = await fetch("/api/lessons", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ id: lessonId, status }),
+  });
+  if (!response.ok) {
+    const data = await readJsonError(response, response.status);
+    throw new Error(data.detail || data.error || "更新失败");
+  }
+  const data = await response.json();
+  return data.lesson;
+}
+
+function applyLessonToCore(lesson) {
+  if (!lesson?.principle) return;
+  state.cognitionCore.emotionalIntelligence = [
+    lesson.principle,
+    ...(state.cognitionCore.emotionalIntelligence || []),
+  ].filter((item, index, list) => item && list.indexOf(item) === index).slice(0, 24);
+  addCompanionLifeEvent({
+    type: "learned_style",
+    title: `学会一条${getLessonTypeLabel(lesson.lessonType)}原则`,
+    summary: lesson.principle,
+    source: "approved_lesson",
+  });
+  saveCognitionCore();
 }
 
 async function saveProfileRemote() {
@@ -3104,6 +3213,69 @@ memoryPermissionInputs.forEach((input) => {
       source: "user_permission",
     });
   });
+});
+
+lessonFormEl.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!state.session) {
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "登录后才能训练属于你的小暖。";
+    return;
+  }
+  const material = lessonInputEl.value.trim();
+  if (material.length < 20) {
+    lessonStatusEl.textContent = "素材至少写 20 个字，小暖才有东西可学。";
+    return;
+  }
+  const accessToken = state.session?.access_token;
+  lessonStatusEl.textContent = "千问正在帮小暖整理...";
+  lessonFormEl.querySelector("button").disabled = true;
+  try {
+    const response = await fetch("/api/lesson-draft", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ material }),
+    });
+    if (!response.ok) {
+      const data = await readJsonError(response, response.status);
+      throw new Error(data.detail || data.error || "整理失败");
+    }
+    const data = await response.json();
+    state.lessons = [data.lesson, ...(state.lessons || [])];
+    lessonInputEl.value = "";
+    lessonStatusEl.textContent = "整理好了，先放进待审核。你点“采用”后才会进入小暖核心。";
+    renderLessons();
+  } catch (error) {
+    lessonStatusEl.textContent = `整理失败：${error.message}`;
+  } finally {
+    lessonFormEl.querySelector("button").disabled = false;
+  }
+});
+
+lessonListEl.addEventListener("click", async (event) => {
+  const approveId = event.target.dataset.lessonApprove;
+  const rejectId = event.target.dataset.lessonReject;
+  const lessonId = approveId || rejectId;
+  if (!lessonId) return;
+  const status = approveId ? "approved" : "rejected";
+  lessonStatusEl.textContent = status === "approved" ? "正在采用这条原则..." : "正在移除这条原则...";
+  try {
+    const updated = await updateLessonStatus(lessonId, status);
+    if (status === "approved") {
+      applyLessonToCore(updated);
+      state.lessons = state.lessons.map((lesson) => (lesson.id === lessonId ? updated : lesson));
+      lessonStatusEl.textContent = "已采用。小暖下次回复会参考这条情商原则。";
+    } else {
+      state.lessons = state.lessons.filter((lesson) => lesson.id !== lessonId);
+      lessonStatusEl.textContent = "已移除，没有进入小暖核心。";
+    }
+    renderLessons();
+  } catch (error) {
+    lessonStatusEl.textContent = `更新失败：${error.message}`;
+  }
 });
 
 googleLoginEl.addEventListener("click", async () => {
