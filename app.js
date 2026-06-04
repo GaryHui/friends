@@ -3249,7 +3249,9 @@ lessonFormEl.addEventListener("submit", async (event) => {
     lessonStatusEl.textContent = "整理好了，先放进待审核。你点“采用”后才会进入小暖核心。";
     renderLessons();
   } catch (error) {
-    lessonStatusEl.textContent = `整理失败：${error.message}`;
+    lessonStatusEl.textContent = error.message.includes("companion_lessons")
+      ? "整理失败：Supabase 还没建 companion_lessons 表。请先执行 README 里的小暖进化学习表 SQL。"
+      : `整理失败：${error.message}`;
   } finally {
     lessonFormEl.querySelector("button").disabled = false;
   }

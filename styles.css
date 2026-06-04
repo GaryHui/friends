@@ -2046,7 +2046,7 @@ select:focus {
 .lesson-form {
   display: grid;
   gap: 10px;
-  margin: 14px 0 16px;
+  margin: 0;
   padding: 12px;
   background: rgba(248, 252, 245, 0.72);
   border: 1px solid rgba(93, 118, 107, 0.16);
@@ -2079,7 +2079,32 @@ select:focus {
 .lesson-list {
   display: grid;
   gap: 10px;
-  margin-bottom: 16px;
+}
+
+.evolution-panel {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.76);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.evolution-panel h4,
+.evolution-panel p {
+  margin: 0;
+}
+
+.evolution-panel h4 {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.evolution-panel > div:first-child p:last-child {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .lesson-item {
