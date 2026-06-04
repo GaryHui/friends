@@ -444,6 +444,11 @@ function createMessage(role, text, kind = "", options = {}) {
   renderMessages();
   if (persistNow) renderRecords();
   renderRelationshipNote();
+  if (persistNow && role === "user") {
+    cancelQuestionFollowup();
+    cancelAmbientNudge();
+    cancelMemoryCheckIn();
+  }
   if (persistNow && role === "friend") {
     scheduleQuestionFollowup(message);
     if (kind !== "soft-nudge") {
@@ -2225,25 +2230,38 @@ function getMemorySavedReply(memory) {
 
 function detectMemoryCandidate(text) {
   const cleaned = text.trim().replace(/\s+/g, " ");
+  const preferredName = extractPreferredName(cleaned);
+  if (preferredName) {
+    return {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      type: "identity",
+      content: `用户希望被称呼为：${preferredName}`,
+      name: preferredName,
+      prompt: `我听到你想让我叫你“${preferredName}”。要不要让我以后记得这个名字？`,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  if (cleaned.length < 6 || cleaned.length > 120) return null;
+  const explicitMemoryIntent = /记住|记下|以后|下次|你要记得|帮我记|我希望你|你可以记/.test(cleaned);
+  const explicitSelfDisclosure = /我的性格|我是.*的人|我比较|我属于|我不喜欢|我喜欢|我最怕|对我有用|能让我好一点|这样会舒服/.test(cleaned);
+  if (!explicitMemoryIntent && !explicitSelfDisclosure) return null;
   const patterns = [
     {
       type: "identity",
       test: /叫我|称呼我|我叫|我的名字|可以叫我/,
-      content: extractPreferredName(cleaned) ? `用户希望被称呼为：${extractPreferredName(cleaned)}` : cleaned,
-      name: extractPreferredName(cleaned),
-      prompt: extractPreferredName(cleaned)
-        ? `我听到你想让我叫你“${extractPreferredName(cleaned)}”。要不要让我以后记得这个名字？`
-        : `我听到你在说怎么称呼你。要不要让我以后记得：“${cleaned}”？`,
+      content: cleaned,
+      name: "",
+      prompt: `我听到你在说怎么称呼你。要不要让我以后记得：“${cleaned}”？`,
     },
     {
       type: "preference",
-      test: /我喜欢|我不喜欢|不要.*安慰|别.*说教|希望你/,
+      test: /我喜欢.*你|我不喜欢.*你|不要.*安慰|别.*说教|希望你|以后.*陪|下次.*陪|你可以.*陪/,
       content: cleaned,
       prompt: `这像是你希望被陪伴的方式。要不要让我以后记得：“${cleaned}”？`,
     },
     {
       type: "personality",
-      test: /我的性格|我是.*的人|我比较|我有点|我很容易|记住.*性格|记下.*性格|我是内向|我是外向|我敏感|我慢热|我容易焦虑|我容易紧张/,
+      test: /我的性格|我是.{0,12}的人|我比较.{1,16}|我属于.{1,16}|记住.*性格|记下.*性格|我是内向|我是外向|我敏感|我慢热|我容易焦虑|我容易紧张/,
       content: cleaned,
       prompt: `这像是在说你的性格和相处方式。要不要让我以后记得：“${cleaned}”？`,
     },
@@ -2262,7 +2280,7 @@ function detectMemoryCandidate(text) {
   ];
 
   const match = patterns.find((item) => item.test.test(cleaned));
-  if (!match || cleaned.length > 120) return null;
+  if (!match) return null;
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     type: match.type,
