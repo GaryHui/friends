@@ -392,6 +392,7 @@ function resetPrivacyTimer() {
 
 async function autoPrivacyExit() {
   if (state.supabase && state.session) {
+    await syncLocalStateRemote();
     await state.supabase.auth.signOut();
     state.session = null;
   }
@@ -1798,6 +1799,13 @@ function updateSocialPracticeFromUser(text) {
   state.socialPractice.comfort = clampScore(state.socialPractice.comfort + comfortDelta);
   state.socialPractice.closeness = clampScore(state.socialPractice.closeness + closenessDelta);
   state.socialPractice.lastFeedback = feedback;
+  state.cognitionCore.socialPractice = {
+    enabled: state.socialPractice.enabled,
+    trust: state.socialPractice.trust,
+    comfort: state.socialPractice.comfort,
+    closeness: state.socialPractice.closeness,
+    lastFeedback: state.socialPractice.lastFeedback,
+  };
   if (Math.abs(trustDelta) + Math.abs(comfortDelta) + Math.abs(closenessDelta) >= 7) {
     addCompanionLifeEvent({
       type: "social_practice",
@@ -1808,6 +1816,7 @@ function updateSocialPracticeFromUser(text) {
   }
   persist();
   renderSocialPractice();
+  saveCognitionCore();
 }
 
 function renderRelationshipNote() {
@@ -2768,6 +2777,8 @@ forgotPasswordEl.addEventListener("click", async () => {
 
 authLogoutEl.addEventListener("click", async () => {
   if (!state.supabase) return;
+  authStatusEl.textContent = "正在保存小暖的关系成长...";
+  await syncLocalStateRemote();
   await state.supabase.auth.signOut();
   state.session = null;
   clearLocalPrivateCache();
