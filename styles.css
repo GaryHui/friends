@@ -948,8 +948,8 @@ h4 {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  margin: 0 0 10px;
-  padding: 12px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
   color: rgba(43, 41, 37, 0.88);
   background: rgba(255, 253, 248, 0.78);
   border: 1px solid rgba(93, 118, 107, 0.14);
@@ -957,8 +957,9 @@ h4 {
 }
 
 .mode-switch > div:first-child {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
   min-width: 0;
 }
 
@@ -967,9 +968,12 @@ h4 {
 }
 
 .mode-switch small {
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mode-options {
@@ -1068,9 +1072,11 @@ h4 {
 
 .social-card {
   display: grid;
-  gap: 10px;
-  margin: 0 0 10px;
-  padding: 12px;
+  grid-template-columns: minmax(120px, 0.78fr) minmax(220px, 1fr);
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 10px 12px;
   color: rgba(43, 41, 37, 0.86);
   background: rgba(255, 253, 248, 0.72);
   border: 1px solid rgba(128, 100, 77, 0.13);
@@ -1085,8 +1091,9 @@ h4 {
 }
 
 .social-card-head div {
-  display: grid;
-  gap: 3px;
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
 }
 
 .social-card-head strong {
@@ -1119,9 +1126,20 @@ h4 {
   line-height: 1.55;
 }
 
+.social-card p {
+  display: none;
+}
+
+.social-card small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .social-meters {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .social-meters label {
@@ -2332,6 +2350,15 @@ select:focus {
 
   .mode-options button {
     flex: 1 1 0;
+  }
+
+  .social-card {
+    grid-template-columns: 1fr;
+  }
+
+  .social-card-head,
+  .social-card-head div {
+    min-width: 0;
   }
 
   .conversation-panel {

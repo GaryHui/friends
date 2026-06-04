@@ -1230,9 +1230,8 @@ function getGrowthProfile() {
 
 function renderGrowthCard() {
   if (!growthStageEl || !growthCopyEl || !growthNextEl || !growthMeterFillEl) return;
-  const visible = Boolean(state.session) && state.companionMode === "social";
-  growthStageEl.closest(".growth-card")?.classList.toggle("hidden", !visible);
-  if (!visible) return;
+  growthStageEl.closest(".growth-card")?.classList.add("hidden");
+  if (!state.session) return;
   const growth = getGrowthProfile();
   growthStageEl.textContent = growth.stage.label;
   growthCopyEl.textContent = growth.copy;
@@ -1283,16 +1282,17 @@ function renderCompanionMode() {
   }
   if (!signedIn) return;
   const isSocial = state.companionMode === "social";
+  const socialStage = getSocialStage();
   modeSwitchButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.companionMode === state.companionMode);
     button.setAttribute("aria-pressed", button.dataset.companionMode === state.companionMode ? "true" : "false");
   });
   if (modeSwitchTitleEl) {
-    modeSwitchTitleEl.textContent = isSocial ? "社交模式" : "倾诉模式";
+    modeSwitchTitleEl.textContent = isSocial ? `社交模式 · ${socialStage.label}` : "倾诉模式";
   }
   if (modeSwitchNoteEl) {
     modeSwitchNoteEl.textContent = isSocial
-      ? "小暖会像慢慢熟起来的新朋友，也会轻轻反馈相处里的边界和靠近。"
+      ? "小暖会留意你们怎样慢慢熟起来，也会轻轻提醒边界。"
       : "小暖先陪你把心里的话放下来，不评价社交表现，也不显示关系练习。";
   }
 }
@@ -1463,7 +1463,7 @@ function renderRelationshipNote() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
   const visible = Boolean(state.session) && state.companionMode === "social";
-  relationshipNoteEl.classList.toggle("hidden", !visible);
+  relationshipNoteEl.classList.add("hidden");
   if (!visible) {
     renderGrowthCard();
     renderSocialPractice();
