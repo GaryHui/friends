@@ -2685,7 +2685,7 @@ function makeKnownMemoryAnswer(text) {
     return `记得。你希望我更亲近一点，像“${contents.join("、")}”这样的方式。\n\n这是你允许我留下的偏好，不是我自己乱猜的。${more}`.trim();
   }
   if (type === "identity") {
-    return `记得。${contents.join("，")}。`;
+    return `记得，${contents.join("，")}。\n\n刚才如果我说得像在核对资料，那是我不对。你不是一条记录，是我应该认出来的人。`;
   }
   if (type === "all") {
     return `记得一些，但我不想像念档案一样倒给你。\n\n我现在记得的是：${contents.join("；")}。${more}`.trim();
@@ -3090,7 +3090,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         }
       } else if (isAskingKnownIdentity(text) && knownName) {
         rememberPreferredName(knownName);
-        addMessage("friend", `记得。你让我叫你 ${knownName}。\n\n这个名字是你点头让我留下的，所以我下次见到你，也应该认得出来。`);
+        addMessage("friend", `${knownName}。\n\n我记得。刚才如果我答得像在核对资料，那是我不对。你不是一条记录，是我应该认出来的人。`);
       } else if (knownMemoryAnswer) {
         addMessage("friend", knownMemoryAnswer);
       } else {
