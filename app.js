@@ -58,8 +58,10 @@ const state = {
   proactiveBoundaryAt: storedProactiveBoundaryAt,
   draftNudgeTimer: null,
   questionFollowupTimer: null,
+  ambientNudgeTimer: null,
   nudgeOutcomeTimer: null,
   lastDraftNudgeAt: 0,
+  lastAmbientNudgeAt: 0,
   lastDraftSignal: "",
   lastFollowedQuestionId: "",
   pendingNudge: null,
@@ -266,6 +268,9 @@ function createMessage(role, text, kind = "", options = {}) {
   renderRelationshipNote();
   if (persistNow && role === "friend") {
     scheduleQuestionFollowup(message);
+    if (kind !== "soft-nudge") {
+      scheduleAmbientNudge(hasGentleQuestion(text) ? 36000 : 12000);
+    }
   }
   return message;
 }
@@ -285,6 +290,13 @@ function cancelQuestionFollowup() {
   if (state.questionFollowupTimer) {
     window.clearTimeout(state.questionFollowupTimer);
     state.questionFollowupTimer = null;
+  }
+}
+
+function cancelAmbientNudge() {
+  if (state.ambientNudgeTimer) {
+    window.clearTimeout(state.ambientNudgeTimer);
+    state.ambientNudgeTimer = null;
   }
 }
 
@@ -424,7 +436,7 @@ function updateProactiveUi() {
   proactiveCueEl.classList.toggle("quiet", quiet);
   proactiveCueCopyEl.textContent = quiet
     ? "小暖现在会安静等你发出来。"
-    : "小暖会在你卡住时轻轻接话。";
+    : "小暖会在你卡住或沉默太久时轻轻接话。";
   proactiveCueToggleEl.textContent = quiet ? "恢复接话" : "安静一点";
 }
 
@@ -481,6 +493,63 @@ function scheduleQuestionFollowup(message) {
     const nudge = addMessage("friend", makeQuestionFollowup(), "soft-nudge");
     startNudgeOutcomeWatch(nudge, "question_followup");
   }, 32000);
+}
+
+function makeAmbientNudge() {
+  const stats = getNudgeStats("ambient_opening");
+  const softOnly = stats.ignored + stats.quieted > stats.responded;
+  const options = softOnly
+    ? [
+        "那我先不问你问题。\n\n你可以把这里当成一个不用解释自己的地方，先待一会儿。",
+        "我先陪你坐一小会儿。\n\n你想说的时候再说，不想说也没关系。",
+      ]
+    : [
+        "我先开个头吧。\n\n有时候一进来反而不知道说什么。你可以不用想主题，就从“今天最卡的一下”或者“现在心里最吵的那个词”开始。",
+        "你不用先想好怎么倾诉。\n\n如果现在脑子是空的，我们就先把今晚放慢一点。你可以只发一个词，我来陪你往下接。",
+        "我在这里，不急。\n\n要不我们先不谈大道理。你今天是更像累、烦、委屈，还是只是有点空？",
+      ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+function makeAmbientSettlingNudge() {
+  const options = [
+    "那我先不追问啦。\n\n你可以把这个窗口放在旁边，我会安静陪你一会儿。想说的时候，发一个字也可以。",
+    "没关系，我们可以先不急着聊。\n\n我会在这里。你不用为了不冷场而勉强自己说话。",
+    "我先把声音放轻一点。\n\n如果你只是想有人在，也可以。等你想开口了，我再接住你。",
+  ];
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+function canAmbientNudge() {
+  const chatViewActive = document.querySelector("#chat-view")?.classList.contains("active");
+  const latest = state.messages[state.messages.length - 1];
+  const hasInput = inputEl.value.trim().length > 0;
+  return (
+    chatViewActive &&
+    !isProactiveQuiet() &&
+    !hasInput &&
+    thinkingEl.classList.contains("hidden") &&
+    latest?.role === "friend" &&
+    latest.kind !== "soft-nudge" &&
+    Date.now() - state.lastAmbientNudgeAt > 45000
+  );
+}
+
+function scheduleAmbientNudge(delay = 12000) {
+  cancelAmbientNudge();
+  if (!canAmbientNudge()) return;
+  state.ambientNudgeTimer = window.setTimeout(() => {
+    if (!canAmbientNudge()) return;
+    state.lastAmbientNudgeAt = Date.now();
+    const nudge = addMessage("friend", makeAmbientNudge(), "soft-nudge");
+    startNudgeOutcomeWatch(nudge, "ambient_opening");
+    state.ambientNudgeTimer = window.setTimeout(() => {
+      const latest = state.messages[state.messages.length - 1];
+      const hasInput = inputEl.value.trim().length > 0;
+      if (isProactiveQuiet() || hasInput || latest?.id !== nudge.id) return;
+      addMessage("friend", makeAmbientSettlingNudge(), "soft-nudge");
+    }, 75000);
+  }, delay);
 }
 
 function inferDraftSignal(draft, fallbackSignal) {
@@ -570,6 +639,7 @@ function scheduleDraftNudge(signal = "pause") {
 
 function handleInputActivity() {
   cancelQuestionFollowup();
+  cancelAmbientNudge();
   const length = inputEl.value.trim().length;
   const previousLength = state.inputActivity.previousLength;
   state.inputActivity.previousLength = length;
@@ -599,6 +669,9 @@ function updateMessage(message, text, options = {}) {
     renderRecords();
     if (message.role === "friend") {
       scheduleQuestionFollowup(message);
+      if (message.kind !== "soft-nudge") {
+        scheduleAmbientNudge(hasGentleQuestion(message.text) ? 36000 : 12000);
+      }
     }
   }
 }
@@ -1486,6 +1559,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
 
   cancelDraftNudge();
   cancelQuestionFollowup();
+  cancelAmbientNudge();
   const proactivePreference = detectProactivePreference(text);
   resolvePendingNudge(proactivePreference === false ? "quieted" : "responded");
   learnFromUserFeedback(text);
@@ -1496,13 +1570,13 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   if (proactivePreference === false) {
     setProactiveMode("quiet", { boundary: true });
     if (text.length <= 32) {
-      addMessage("friend", "好，我会安静一点。以后你不主动发出来，我就不在输入停顿时接话。");
+      addMessage("friend", "好，我会安静一点。以后你不主动发出来，我就不在输入停顿或沉默太久时接话。");
       return;
     }
   } else if (proactivePreference === true) {
     setProactiveMode("gentle");
     if (text.length <= 32) {
-      addMessage("friend", "好，那我会在你卡住的时候轻轻接一下，但不会催你。");
+      addMessage("friend", "好，那我会在你卡住或沉默很久的时候轻轻接一下，但不会催你。");
       return;
     }
   }
@@ -1567,6 +1641,8 @@ inputEl.addEventListener("blur", cancelDraftNudge);
 
 document.querySelector("#clear-chat").addEventListener("click", () => {
   cancelDraftNudge();
+  cancelQuestionFollowup();
+  cancelAmbientNudge();
   resetInputActivity();
   state.messages = [];
   persist();
@@ -1749,7 +1825,7 @@ privacyTimeoutSelectEl.addEventListener("change", () => {
 proactiveCueToggleEl.addEventListener("click", () => {
   if (state.proactiveMode === "quiet") {
     setProactiveMode("gentle");
-    addMessage("friend", "好，我会回到轻轻接话的状态。你卡住的时候，我会试着靠近一点，但不催你。", "soft-nudge");
+    addMessage("friend", "好，我会回到轻轻接话的状态。你卡住或沉默很久的时候，我会试着靠近一点，但不催你。", "soft-nudge");
     return;
   }
   setProactiveMode("quiet", { boundary: true });
@@ -1869,6 +1945,11 @@ function switchView(view) {
   }
   if (view === "records") {
     renderRecords();
+  }
+  if (view === "chat") {
+    scheduleAmbientNudge(9000);
+  } else {
+    cancelAmbientNudge();
   }
 }
 
