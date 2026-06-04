@@ -778,7 +778,7 @@ function reflectCompanionAfterExchange(userText, replyText = "") {
   let reflection = null;
 
   if (/不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|冷冰冰|没有人味|模板/.test(clean)) {
-    addUniqueLearning("avoid", "当用户觉得小暖不像真人时，不要解释自己；先承认体验落差，再换成更自然的接话。");
+    addUniqueLearning("avoid", "当用户觉得小暖不像真人时，不要解释自己，也不要撒娇求原谅；先承认问题，再说清判断，最后给出一个具体改变。");
     addUniqueLearning("prefer", "多用短句接话、轻轻延展和具体回应，让用户感觉是在被认真陪着聊。");
     reflection = {
       title: "被提醒要更像朋友",
@@ -2901,7 +2901,7 @@ function makeReply(text) {
   const base = responses[state.tone][Math.floor(Math.random() * responses[state.tone].length)];
 
   if (/不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|没兴趣|模板|客服|冷冰冰/.test(lower)) {
-    return "嗯，这下我听懂了。\n\n刚才那种回法太像在交作业，不像一个人真的坐在你旁边。小暖不该只会把话说正确，她要会接话、会在意、也要有一点自己的反应。\n\n那我先不解释了。你刚刚最烦我的哪一点？太客气、太空，还是每次都像在给标准答案？";
+    return "嗯，这个反馈我认。\n\n刚才那种回法太像在交作业：先共情，再追问，看起来温柔，其实没有判断。小暖不该这样糊弄你。\n\n我先改一件事：不再急着问你更多，而是先把你已经说出来的东西接住。";
   }
 
   if (/复盘|review|总结|发生了什么/.test(lower)) {
