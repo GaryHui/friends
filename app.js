@@ -2370,6 +2370,7 @@ async function loadCloudState() {
       createdAt: memory.created_at,
     }));
     cleanupGeneratedFirstMeetMemories();
+    repairProfileFromSavedMemories();
   }
 
   if (companionCore?.core) {
@@ -2550,6 +2551,7 @@ function extractPreferredName(text) {
   const patterns = [
     /用户希望被称呼为[:：]?\s*([^，。！？,.!?、\s]{1,16})/,
     /(?:我叫|我的名字是|我的名字叫|名字是)([^，。！？,.!?、\s]{1,16})/,
+    /(?:我叫|我的名字是|我的名字叫|名字是)\s*([A-Za-z0-9_\-\u4e00-\u9fa5]{1,16})/,
     /(?:叫我|称呼我|可以叫我|以后叫我)([^，。！？,.!?、\s]{1,16})/,
   ];
   const match = patterns.map((pattern) => cleaned.match(pattern)).find(Boolean);
@@ -2614,6 +2616,16 @@ function findMemoriesToForget(text) {
   const keyword = normalizeForgetKeyword(text);
   if (!keyword) return [];
   return state.memories.filter((memory) => (memory.content || "").replace(/\s+/g, "").includes(keyword));
+}
+
+function getKnownPreferredName() {
+  if (state.profile?.name) return state.profile.name;
+  const memory = state.memories.find((item) => item?.status !== "deleted" && (item.type === "identity" || extractPreferredName(item.content || "")));
+  return memory ? extractPreferredName(memory.content || "") : "";
+}
+
+function isAskingKnownIdentity(text) {
+  return /(你知道我是谁|你还记得我吗|你记得我吗|我是谁|我的名字|我叫什么|你知道我叫什么)/.test(text);
 }
 
 function forgetMemories(memories) {
@@ -2992,6 +3004,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   }
   const forgetMatches = findMemoriesToForget(text);
   const memoryCandidate = detectMemoryCandidate(text);
+  const knownName = getKnownPreferredName();
 
   window.setTimeout(async () => {
     try {
@@ -3009,6 +3022,9 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         } else {
           addMessage("friend", "可以。只是我没确定你想让我忘掉哪一条。你可以说得更具体一点，或者去“记录”里直接删除。");
         }
+      } else if (isAskingKnownIdentity(text) && knownName) {
+        rememberPreferredName(knownName);
+        addMessage("friend", `记得。你让我叫你 ${knownName}。\n\n这个名字是你点头让我留下的，所以我下次见到你，也应该认得出来。`);
       } else {
         let streamedMessage = null;
         const reply = await getAiReply(text, (_delta, fullText) => {

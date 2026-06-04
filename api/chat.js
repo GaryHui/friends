@@ -53,6 +53,27 @@ async function streamQwenToClient(upstream, res) {
   }
 }
 
+function extractPreferredName(text = "") {
+  const cleaned = String(text).trim().replace(/\s+/g, " ");
+  const patterns = [
+    /用户希望被称呼为[:：]?\s*([^，。！？,.!?、\s]{1,16})/,
+    /(?:我叫|我的名字是|我的名字叫|名字是)([^，。！？,.!?、\s]{1,16})/,
+    /(?:我叫|我的名字是|我的名字叫|名字是)\s*([A-Za-z0-9_\-\u4e00-\u9fa5]{1,16})/,
+    /(?:叫我|称呼我|可以叫我|以后叫我)([^，。！？,.!?、\s]{1,16})/,
+  ];
+  const match = patterns.map((pattern) => cleaned.match(pattern)).find(Boolean);
+  if (!match) return "";
+  return match[1]
+    .replace(/^(是|叫|为)/, "")
+    .replace(/(吧|啦|啊|呀|哦|哈)$/, "")
+    .trim();
+}
+
+function findNameFromMemories(memories = []) {
+  const identity = memories.find((item) => item?.status === "active" && (item.type === "identity" || extractPreferredName(item.content || "")));
+  return identity ? extractPreferredName(identity.content || "") : "";
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -134,7 +155,8 @@ export default async function handler(req, res) {
     .slice(0, 20)
     .map((item) => `- [${memoryTypeLabel[item.type] || "授权记忆"}] ${item.content}`)
     .join("\n");
-  const displayName = dbProfile?.nickname || profile?.name;
+  const memoryName = findNameFromMemories(memorySource);
+  const displayName = dbProfile?.nickname || profile?.name || memoryName;
   const effectiveCognitionCore = dbCompanionCore?.core || cognitionCore;
   const effectiveNudgeStats = dbCompanionCore?.nudge_stats || cognitionCore?.nudgeStats;
   const cognitionPrinciples = Array.isArray(effectiveCognitionCore?.principles)
