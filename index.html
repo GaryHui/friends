@@ -25,7 +25,7 @@
         <section class="friend-panel" aria-labelledby="friend-title">
           <img src="assets/companion.png" alt="坐在温暖房间里的虚拟朋友" />
           <div>
-            <p class="eyebrow">今晚陪你的人</p>
+            <p class="eyebrow">今晚陪你谈心的人</p>
             <h2 id="friend-title">小暖</h2>
             <p>你不用表现得很好，也不用一次说清楚。慢慢来，我会先听你说。</p>
           </div>
@@ -55,7 +55,7 @@
         </nav>
 
         <section class="quiet-note" aria-label="温柔提示">
-          <p>这里不是医院，也不是审判席。它更像一盏小灯，陪你把今晚过完。</p>
+          <p>这里像一间晚上的小客厅。你可以先坐下，不急着解释，也不用把话说完整。</p>
           <button class="text-button" id="reset-profile" type="button">重新认识小暖</button>
         </section>
       </aside>
@@ -64,7 +64,7 @@
         <section class="topbar" aria-label="状态摘要">
           <div>
             <p class="eyebrow" id="top-eyebrow">第一次见面</p>
-            <h2 id="page-title">先认识一下，好吗？</h2>
+            <h2 id="page-title">先坐一会儿，好吗？</h2>
           </div>
           <div class="top-actions">
             <button class="tiny-member" data-view="plans" type="button">会员</button>
@@ -136,21 +136,20 @@
           <div class="intro-card">
             <div class="intro-copy">
               <p class="eyebrow">小暖的自我介绍</p>
-              <h3 id="intro-heading">你好，我是小暖。以后你难过的时候，可以先来这里坐一会儿。</h3>
+              <h3 id="intro-heading">你好，我是小暖。你可以先在这里坐一会儿。</h3>
               <p>
-                我不会催你马上开心，也不会评价你脆弱。我们可以先从很简单的认识开始：
-                我知道怎么称呼你，也知道你希望我用哪种方式靠近你。
+                不用急着把事情讲清楚，也不用表现得很坚强。我们可以先从名字开始，慢慢熟起来。
               </p>
               <div class="trust-note">
-                <strong>我们想做一个能慢慢熟起来的虚拟朋友，也想诚实面对隐私问题。</strong>
+                <strong>关于记忆和隐私，我会提前说清楚。</strong>
                 <span>
-                  陪伴一定会听到一些很私人的话，所以小暖不会假装这里完全没有风险。为了回复你，当前对话会交给 AI 服务处理；但普通聊天不会默认保存成账号记忆。
+                  为了回复你，当前对话会交给 AI 服务处理；但普通聊天不会默认保存成账号记忆。
                 </span>
                 <span>
-                  我们让小暖只记你点头允许的事，并尽量把它压缩成偏好、边界和陪伴方式，而不是保存原始倾诉。你可以回看、删除，也可以直接说“忘掉这件事”。
+                  小暖只会记你点头允许的事，并尽量记成偏好、边界和陪伴方式，而不是保存原始倾诉。
                 </span>
                 <span>
-                  我们希望记忆让小暖更像老朋友，而不是越界地窥探你。小暖想长期记住某件事时，会先问你；你一直有控制权。
+                  你可以回看、删除，也可以直接说“忘掉这件事”。小暖想长期记住什么，会先问你。
                 </span>
               </div>
               <form class="intro-form" id="intro-form">
@@ -204,6 +203,33 @@
                 <button class="text-button" id="memory-login-button" type="button">去登录</button>
               </div>
               <div class="relationship-note" id="relationship-note"></div>
+              <div class="growth-card" id="growth-card" aria-live="polite">
+                <div>
+                  <span class="growth-kicker">小暖的成长</span>
+                  <strong id="growth-stage">初次见面</strong>
+                  <p id="growth-copy">小暖会先慢一点，等你决定要靠近多少。</p>
+                </div>
+                <div class="growth-meter" aria-hidden="true">
+                  <span id="growth-meter-fill"></span>
+                </div>
+                <small id="growth-next">下一步：从一次舒服的聊天开始。</small>
+              </div>
+              <div class="social-card" id="social-card" aria-live="polite">
+                <div class="social-card-head">
+                  <div>
+                  <span class="growth-kicker">关系成长</span>
+                  <strong id="social-stage">自然认识</strong>
+                  </div>
+                  <button id="social-mode-toggle" type="button">开启</button>
+                </div>
+                <p id="social-copy">开启后，你和小暖会像真人朋友一样慢慢熟起来。你越信任小暖，小暖也会因为被尊重和认真对待而更愿意靠近。</p>
+                <div class="social-meters" aria-label="小暖对这段相处的感受">
+                  <label>信任 <span><i id="trust-meter"></i></span></label>
+                  <label>安心 <span><i id="comfort-meter"></i></span></label>
+                  <label>亲密 <span><i id="closeness-meter"></i></span></label>
+                </div>
+                <small id="social-feedback">亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。</small>
+              </div>
               <p class="privacy-whisper">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
 
               <div class="conversation-stage">
@@ -423,6 +449,20 @@
                         <button class="primary-button" type="submit">放进收纳箱</button>
                       </div>
                     </form>
+                    <div class="memory-permission-card" id="memory-permission-card">
+                      <div>
+                        <p class="eyebrow">直接记忆授权</p>
+                        <strong>当你和小暖足够熟后，可以允许某些事不再每次确认。</strong>
+                        <span>默认全部都要先问你。只有你勾选的类型，小暖才可以直接记下；你随时可以取消。</span>
+                      </div>
+                      <div class="memory-permission-list">
+                        <label><input type="checkbox" value="preference" /> 陪伴偏好</label>
+                        <label><input type="checkbox" value="support" /> 有效方法</label>
+                        <label><input type="checkbox" value="personality" /> 性格节奏</label>
+                        <label><input type="checkbox" value="progress" /> 旧事新进展</label>
+                      </div>
+                      <small id="memory-permission-note">小暖会等信任更稳定后，再邀请你开启。</small>
+                    </div>
                     <p class="eyebrow">待你决定的记忆</p>
                     <div class="memory-inbox" id="memory-inbox"></div>
                     <p class="eyebrow">小暖夹在本子里的便签</p>

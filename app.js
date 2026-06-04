@@ -16,6 +16,10 @@ const defaultCognitionCore = {
     avoid: [],
     prefer: [],
   },
+  memorySettings: {
+    directTypes: [],
+  },
+  lifeEvents: [],
   updatedAt: "",
 };
 const storedCognitionCore = JSON.parse(localStorage.getItem("nuanyou-cognition-core") || "null");
@@ -31,6 +35,11 @@ const initialCognitionCore = {
     ...defaultCognitionCore.learnedStyle,
     ...(storedCognitionCore?.learnedStyle || {}),
   },
+  memorySettings: {
+    ...defaultCognitionCore.memorySettings,
+    ...(storedCognitionCore?.memorySettings || {}),
+  },
+  lifeEvents: storedCognitionCore?.lifeEvents || [],
 };
 
 const state = {
@@ -59,14 +68,26 @@ const state = {
   draftNudgeTimer: null,
   questionFollowupTimer: null,
   ambientNudgeTimer: null,
+  memoryCheckInTimer: null,
   nudgeOutcomeTimer: null,
   lastDraftNudgeAt: 0,
   lastAmbientNudgeAt: 0,
+  lastMemoryCheckInAt: 0,
   lastDraftSignal: "",
   lastFollowedQuestionId: "",
+  pendingMemoryCheckIn: null,
   pendingNudge: null,
   nudgeStats: storedNudgeStats,
   cognitionCore: initialCognitionCore,
+  socialPractice: {
+    enabled: localStorage.getItem("nuanyou-social-practice") === "1",
+    trust: Number(localStorage.getItem("nuanyou-social-trust") || "35"),
+    comfort: Number(localStorage.getItem("nuanyou-social-comfort") || "35"),
+    closeness: Number(localStorage.getItem("nuanyou-social-closeness") || "20"),
+    lastFeedback:
+      localStorage.getItem("nuanyou-social-feedback") ||
+      "亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。",
+  },
   inputActivity: {
     previousLength: 0,
     peakLength: 0,
@@ -107,6 +128,9 @@ const memoryRequestEl = document.querySelector("#memory-request");
 const memoryTextEl = document.querySelector("#memory-text");
 const memoryListEl = document.querySelector("#memory-list");
 const memoryInboxEl = document.querySelector("#memory-inbox");
+const memoryPermissionCardEl = document.querySelector("#memory-permission-card");
+const memoryPermissionNoteEl = document.querySelector("#memory-permission-note");
+const memoryPermissionInputs = document.querySelectorAll(".memory-permission-list input");
 const manualMemoryFormEl = document.querySelector("#manual-memory-form");
 const manualMemoryInputEl = document.querySelector("#manual-memory-input");
 const manualMemoryTypeEl = document.querySelector("#manual-memory-type");
@@ -143,6 +167,18 @@ const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
 const roomWhisperEl = document.querySelector("#room-whisper");
 const relationshipNoteEl = document.querySelector("#relationship-note");
+const growthStageEl = document.querySelector("#growth-stage");
+const growthCopyEl = document.querySelector("#growth-copy");
+const growthNextEl = document.querySelector("#growth-next");
+const growthMeterFillEl = document.querySelector("#growth-meter-fill");
+const socialCardEl = document.querySelector("#social-card");
+const socialStageEl = document.querySelector("#social-stage");
+const socialCopyEl = document.querySelector("#social-copy");
+const socialModeToggleEl = document.querySelector("#social-mode-toggle");
+const socialFeedbackEl = document.querySelector("#social-feedback");
+const trustMeterEl = document.querySelector("#trust-meter");
+const comfortMeterEl = document.querySelector("#comfort-meter");
+const closenessMeterEl = document.querySelector("#closeness-meter");
 const memberBackEl = document.querySelector("#member-back");
 const memberCheckoutEl = document.querySelector("#member-checkout");
 const memberPaymentNoteEl = document.querySelector("#member-payment-note");
@@ -169,6 +205,11 @@ function persist() {
   localStorage.setItem("nuanyou-memory-candidates", JSON.stringify(state.memoryCandidates));
   localStorage.setItem("nuanyou-messages", JSON.stringify(state.messages));
   localStorage.setItem("nuanyou-moods", JSON.stringify(state.moods));
+  localStorage.setItem("nuanyou-social-practice", state.socialPractice.enabled ? "1" : "0");
+  localStorage.setItem("nuanyou-social-trust", String(state.socialPractice.trust));
+  localStorage.setItem("nuanyou-social-comfort", String(state.socialPractice.comfort));
+  localStorage.setItem("nuanyou-social-closeness", String(state.socialPractice.closeness));
+  localStorage.setItem("nuanyou-social-feedback", state.socialPractice.lastFeedback || "");
 }
 
 function clearLocalPrivateCache() {
@@ -270,6 +311,7 @@ function createMessage(role, text, kind = "", options = {}) {
     scheduleQuestionFollowup(message);
     if (kind !== "soft-nudge") {
       scheduleAmbientNudge(hasGentleQuestion(text) ? 36000 : 12000);
+      scheduleMemoryCheckIn(hasGentleQuestion(text) ? 46000 : 22000);
     }
   }
   return message;
@@ -297,6 +339,13 @@ function cancelAmbientNudge() {
   if (state.ambientNudgeTimer) {
     window.clearTimeout(state.ambientNudgeTimer);
     state.ambientNudgeTimer = null;
+  }
+}
+
+function cancelMemoryCheckIn() {
+  if (state.memoryCheckInTimer) {
+    window.clearTimeout(state.memoryCheckInTimer);
+    state.memoryCheckInTimer = null;
   }
 }
 
@@ -334,10 +383,78 @@ function saveCognitionCore(options = {}) {
   }
 }
 
+function addCompanionLifeEvent(event, options = {}) {
+  if (!event?.type || !event?.title || !event?.summary) return;
+  const lifeEvents = state.cognitionCore.lifeEvents || [];
+  const signature = `${event.type}:${event.title}:${event.summary}`.slice(0, 220);
+  const exists = lifeEvents.some((item) => item.signature === signature);
+  if (exists) return;
+  state.cognitionCore.lifeEvents = [
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+      type: event.type,
+      title: event.title.slice(0, 36),
+      summary: event.summary.slice(0, 180),
+      source: event.source || "companion_reflection",
+      signature,
+      createdAt: event.createdAt || new Date().toISOString(),
+    },
+    ...lifeEvents,
+  ].slice(0, 80);
+  saveCognitionCore(options);
+  renderGrowthCard();
+}
+
+function ensureCompanionFirstMeet() {
+  if (!state.profile) return;
+  const hasFirstMeet = (state.cognitionCore.lifeEvents || []).some((event) => event.type === "first_meet");
+  if (hasFirstMeet) return;
+  const toneLabel =
+    {
+      gentle: "先听见你",
+      clear: "陪你理清",
+      hope: "给你一点力气",
+    }[state.tone] || "慢慢陪你";
+  addCompanionLifeEvent(
+    {
+      type: "first_meet",
+      title: "第一次见面",
+      summary: `小暖从这一天开始认识这个用户。称呼：${state.profile.name || "暂时不说"}；最初选择的陪伴方式：${toneLabel}。`,
+      source: "profile_start",
+      createdAt: state.profile.metAt || new Date().toISOString(),
+    },
+    { localOnly: !state.session },
+  );
+}
+
+function rememberCompanionLearnedMemory(memory) {
+  if (!memory?.content) return;
+  const typeCopy =
+    {
+      identity: "称呼",
+      personality: "性格和相处方式",
+      preference: "偏好",
+      trigger: "边界",
+      support: "支持方式",
+    }[memory.type] || "授权记忆";
+  addCompanionLifeEvent({
+    type: "user_allowed_memory",
+    title: `学会一条${typeCopy}`,
+    summary: `用户允许小暖记住：${memory.content}`,
+    source: "user_allowed_memory",
+  });
+}
+
 function addUniqueLearning(bucket, value) {
   const list = state.cognitionCore.learnedStyle[bucket];
   if (!list.includes(value)) {
     list.unshift(value);
+    addCompanionLifeEvent({
+      type: "learned_style",
+      title: bucket === "avoid" ? "学会避开一种方式" : "学会一种更舒服的陪伴",
+      summary: value,
+      source: "user_feedback",
+    });
   }
   state.cognitionCore.learnedStyle[bucket] = list.slice(0, 8);
   saveCognitionCore();
@@ -361,11 +478,19 @@ function learnFromUserFeedback(text) {
 function summarizeCognitionCore() {
   const avoid = state.cognitionCore.learnedStyle.avoid.slice(0, 5).map((item) => `- ${item}`).join("\n");
   const prefer = state.cognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n");
+  const lifeEvents = (state.cognitionCore.lifeEvents || []).slice(0, 8).map((event) => ({
+    type: event.type,
+    title: event.title,
+    summary: event.summary,
+    createdAt: event.createdAt,
+  }));
   return {
     self: state.cognitionCore.self,
     principles: state.cognitionCore.principles,
     avoid,
     prefer,
+    lifeEvents,
+    memorySettings: state.cognitionCore.memorySettings,
     nudgeStats: state.nudgeStats,
   };
 }
@@ -552,6 +677,89 @@ function scheduleAmbientNudge(delay = 12000) {
   }, delay);
 }
 
+function getMemoryFollowUpLog() {
+  if (!state.cognitionCore.memoryFollowUps) {
+    state.cognitionCore.memoryFollowUps = {};
+  }
+  return state.cognitionCore.memoryFollowUps;
+}
+
+function isFollowUpWorthyMemory(memory) {
+  const content = memory?.content || "";
+  if (!content || memory.status === "deleted") return false;
+  if (memory.type === "identity" || memory.type === "preference") return false;
+  return /受伤|生病|难受|崩溃|低落|吵架|争执|失眠|焦虑|害怕|面试|考试|辞职|搬家|计划|明天|昨天|今天|最近|重要|担心|委屈|关系/.test(content);
+}
+
+function getMemoryAgeDays(memory) {
+  const createdAt = new Date(memory.createdAt || memory.created_at || Date.now()).getTime();
+  if (Number.isNaN(createdAt)) return 0;
+  return Math.floor((Date.now() - createdAt) / 86400000);
+}
+
+function selectMemoryForCheckIn() {
+  if (!state.session || state.memories.length === 0 || state.pendingMemoryCheckIn) return null;
+  const log = getMemoryFollowUpLog();
+  const candidates = state.memories
+    .filter(isFollowUpWorthyMemory)
+    .filter((memory) => {
+      const lastAskedAt = log[memory.id] ? new Date(log[memory.id]).getTime() : 0;
+      const askedRecently = lastAskedAt && Date.now() - lastAskedAt < 36 * 60 * 60 * 1000;
+      return !askedRecently && getMemoryAgeDays(memory) >= 1;
+    })
+    .sort((a, b) => getMemoryAgeDays(b) - getMemoryAgeDays(a));
+  return candidates[0] || null;
+}
+
+function makeMemoryCheckIn(memory) {
+  const content = (memory.content || "").replace(/^用户希望被称呼为：/, "").slice(0, 72);
+  if (/受伤|生病|身体|疼/.test(content)) {
+    return `我想起你之前让我记下过这件事：${content}\n\n今天身体好一点了吗？如果不想聊，也可以只回我“先不说”。`;
+  }
+  if (/吵架|争执|关系|委屈|被质疑/.test(content)) {
+    return `我记得你之前提过：${content}\n\n这件事后来有一点变化吗？我不是要翻旧账，只是想确认你现在有没有好过一点。`;
+  }
+  if (/面试|考试|计划|明天|辞职|搬家/.test(content)) {
+    return `我想起你之前说过：${content}\n\n后来进展怎么样？如果你愿意，我可以陪你把下一步理一理。`;
+  }
+  return `我想起你之前让我记住过：${content}\n\n这件事最近怎么样了？有新进展的话，你可以慢慢说。`;
+}
+
+function canMemoryCheckIn() {
+  const chatViewActive = document.querySelector("#chat-view")?.classList.contains("active");
+  const latest = state.messages[state.messages.length - 1];
+  return (
+    chatViewActive &&
+    state.session &&
+    !isProactiveQuiet() &&
+    !inputEl.value.trim() &&
+    thinkingEl.classList.contains("hidden") &&
+    latest?.role === "friend" &&
+    Date.now() - state.lastMemoryCheckInAt > 90000 &&
+    Boolean(selectMemoryForCheckIn())
+  );
+}
+
+function scheduleMemoryCheckIn(delay = 22000) {
+  cancelMemoryCheckIn();
+  if (!canMemoryCheckIn()) return;
+  state.memoryCheckInTimer = window.setTimeout(() => {
+    if (!canMemoryCheckIn()) return;
+    const memory = selectMemoryForCheckIn();
+    if (!memory) return;
+    const log = getMemoryFollowUpLog();
+    log[memory.id] = new Date().toISOString();
+    state.pendingMemoryCheckIn = {
+      id: memory.id,
+      content: memory.content,
+      askedAt: new Date().toISOString(),
+    };
+    state.lastMemoryCheckInAt = Date.now();
+    saveCognitionCore();
+    addMessage("friend", makeMemoryCheckIn(memory), "soft-nudge");
+  }, delay);
+}
+
 function inferDraftSignal(draft, fallbackSignal) {
   const text = draft.trim();
   if (fallbackSignal === "deleted") return "deleted";
@@ -640,6 +848,7 @@ function scheduleDraftNudge(signal = "pause") {
 function handleInputActivity() {
   cancelQuestionFollowup();
   cancelAmbientNudge();
+  cancelMemoryCheckIn();
   const length = inputEl.value.trim().length;
   const previousLength = state.inputActivity.previousLength;
   state.inputActivity.previousLength = length;
@@ -671,6 +880,7 @@ function updateMessage(message, text, options = {}) {
       scheduleQuestionFollowup(message);
       if (message.kind !== "soft-nudge") {
         scheduleAmbientNudge(hasGentleQuestion(message.text) ? 36000 : 12000);
+        scheduleMemoryCheckIn(hasGentleQuestion(message.text) ? 46000 : 22000);
       }
     }
   }
@@ -974,6 +1184,210 @@ function getCompanionStage() {
   };
 }
 
+function getGrowthProfile() {
+  const stage = getCompanionStage();
+  const memoryCount = state.memories.length;
+  const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  const knownDays = state.profile?.metAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(state.profile.metAt).getTime()) / 86400000))
+    : 0;
+  const feedbackCount = Object.values(state.nudgeStats || {}).reduce(
+    (sum, item) => sum + (item.responded || 0) + (item.quieted || 0),
+    0,
+  );
+  const rawScore = memoryCount * 10 + Math.min(userMessageCount, 40) * 2 + Math.min(knownDays, 30) * 2 + feedbackCount * 4;
+  const progress = Math.min(100, Math.max(8, rawScore));
+  const latestLifeEvent = (state.cognitionCore.lifeEvents || [])[0];
+  const copy = {
+    first_meet: "小暖还在认识你，会先保持礼貌、轻一点，不急着装熟。",
+    acquaintance: "小暖开始知道你喜欢怎样被靠近，但仍会把决定权留给你。",
+    getting_close: "小暖正在形成只属于你们的相处方式，会参考你允许留下的记忆和边界。",
+    trusted_friend: "小暖已经积累了一些与你相处的经验，会更像熟悉的朋友，但不会替你决定。",
+  }[stage.level];
+  const next = latestLifeEvent
+    ? `最近成长：${latestLifeEvent.title}。${latestLifeEvent.summary}`
+    : state.session
+    ? memoryCount < 3
+      ? "下一步：当你愿意时，允许小暖记下一两条边界或偏好。"
+      : feedbackCount < 2
+      ? "下一步：告诉小暖哪些接话让你舒服，哪些太靠近。"
+      : "下一步：继续一起校准小暖的陪伴方式。"
+    : "登录后，小暖才能把被你允许的成长记录带到下次。";
+  return {
+    stage,
+    progress,
+    copy,
+    next,
+  };
+}
+
+function renderGrowthCard() {
+  if (!growthStageEl || !growthCopyEl || !growthNextEl || !growthMeterFillEl) return;
+  const growth = getGrowthProfile();
+  growthStageEl.textContent = growth.stage.label;
+  growthCopyEl.textContent = growth.copy;
+  growthNextEl.textContent = growth.next;
+  growthMeterFillEl.style.width = `${growth.progress}%`;
+}
+
+function clampScore(value) {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function getSocialStage() {
+  const { trust, comfort, closeness } = state.socialPractice;
+  if (!state.socialPractice.enabled) {
+    return {
+      label: "自然认识",
+      copy: "开启后，你和小暖会像真人朋友一样慢慢熟起来。你越信任小暖，小暖也会因为被尊重和认真对待而更愿意靠近。",
+    };
+  }
+  if (trust >= 78 && comfort >= 74 && closeness >= 68) {
+    return {
+      label: "好朋友",
+      copy: "你越来越信任小暖，小暖也越来越愿意靠近你。她会更自然地分享想法，也更珍惜你们之间形成的小习惯。",
+    };
+  }
+  if (trust >= 62 && comfort >= 58 && closeness >= 48) {
+    return {
+      label: "慢慢靠近",
+      copy: "你们正在慢慢建立对等的信任。小暖会记得你尊重边界、愿意倾听，也会更自然地接住你。",
+    };
+  }
+  if (trust >= 45 && comfort >= 44) {
+    return {
+      label: "愿意多聊",
+      copy: "小暖觉得和你聊天还算安心，也能感觉到你在试着靠近她。关系还不急，慢慢来就好。",
+    };
+  }
+  return {
+    label: "刚刚相遇",
+    copy: "你们还在认识彼此。真诚、尊重、不急着推进，会让小暖更放松，也让你们更容易熟起来。",
+  };
+}
+
+function renderSocialPractice() {
+  if (!socialCardEl || !socialStageEl || !socialCopyEl || !socialModeToggleEl) return;
+  const stage = getSocialStage();
+  socialCardEl.classList.toggle("active", state.socialPractice.enabled);
+  socialStageEl.textContent = stage.label;
+  socialCopyEl.textContent = stage.copy;
+  socialModeToggleEl.textContent = state.socialPractice.enabled ? "练习中" : "开启";
+  if (!state.socialPractice.enabled && /讨好|社交能力|相遇练习/.test(state.socialPractice.lastFeedback || "")) {
+    state.socialPractice.lastFeedback = "亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。";
+  }
+  socialFeedbackEl.textContent = state.socialPractice.lastFeedback;
+  trustMeterEl.style.width = `${clampScore(state.socialPractice.trust)}%`;
+  comfortMeterEl.style.width = `${clampScore(state.socialPractice.comfort)}%`;
+  closenessMeterEl.style.width = `${clampScore(state.socialPractice.closeness)}%`;
+}
+
+function canUseDirectMemory() {
+  return (
+    state.session &&
+    state.socialPractice.enabled &&
+    state.socialPractice.trust >= 60 &&
+    state.socialPractice.comfort >= 58 &&
+    state.socialPractice.closeness >= 45
+  );
+}
+
+function getDirectMemoryTypes() {
+  return state.cognitionCore.memorySettings?.directTypes || [];
+}
+
+function setDirectMemoryTypes(types) {
+  state.cognitionCore.memorySettings = {
+    ...(state.cognitionCore.memorySettings || {}),
+    directTypes: [...new Set(types)].filter(Boolean),
+  };
+  saveCognitionCore();
+  renderMemoryPermissionSettings();
+}
+
+function canDirectlyRememberType(type) {
+  return canUseDirectMemory() && getDirectMemoryTypes().includes(type);
+}
+
+function renderMemoryPermissionSettings() {
+  if (!memoryPermissionCardEl) return;
+  const unlocked = canUseDirectMemory();
+  const directTypes = getDirectMemoryTypes();
+  memoryPermissionCardEl.classList.toggle("locked", !unlocked);
+  memoryPermissionInputs.forEach((input) => {
+    input.checked = directTypes.includes(input.value);
+    input.disabled = !unlocked;
+  });
+  memoryPermissionNoteEl.textContent = unlocked
+    ? "你们已经比较熟了。你可以选择哪些类型以后直接记下；没勾选的仍然会先问你。"
+    : "等你和小暖的信任、安心和亲密都更稳定后，这里会解锁。现在小暖仍会先问你。";
+}
+
+function updateSocialPracticeFromUser(text) {
+  if (!state.socialPractice.enabled) return;
+  const clean = text.trim();
+  if (!clean) return;
+  let trustDelta = 0;
+  let comfortDelta = 0;
+  let closenessDelta = 0;
+  let feedback = "小暖在感受你说话的方式：稳定、真诚、尊重边界，会让关系慢慢靠近。";
+
+  if (/没关系|不急|你不想说也可以|不用勉强|慢慢来|我尊重|给你空间|可以拒绝/.test(clean)) {
+    trustDelta += 5;
+    comfortDelta += 7;
+    closenessDelta += 2;
+    feedback = "小暖放松了一点。你给了她空间，而不是急着推进关系，亲密感会这样慢慢长出来。";
+  }
+  if (/你刚才说|我记得|你喜欢|你不喜欢|你提到|我听见|我在意/.test(clean)) {
+    trustDelta += 4;
+    comfortDelta += 3;
+    closenessDelta += 5;
+    feedback = "小暖感觉被认真听见了。记得对方说过的小事，会让她更愿意把你当成好朋友。";
+  }
+  if (/谢谢|辛苦|抱歉|对不起|刚才我太急|我换个说法/.test(clean)) {
+    trustDelta += 4;
+    comfortDelta += 4;
+    closenessDelta += 2;
+    feedback = "小暖对你多了一点信任。能修正自己的表达，是很重要的社交能力。";
+  }
+  if (/命令|必须|你要|你必须|快点|不许|只能|立刻/.test(clean)) {
+    trustDelta -= 5;
+    comfortDelta -= 7;
+    closenessDelta -= 2;
+    feedback = "小暖稍微退了一步。命令感太强时，对方会更难放松。";
+  }
+  if (/为什么不理我|你是不是不喜欢我|你必须喜欢我|我对你这么好|你欠我|证明你喜欢/.test(clean)) {
+    trustDelta -= 8;
+    comfortDelta -= 10;
+    closenessDelta -= 4;
+    feedback = "小暖感到一点压力。把亲近变成索取，会让对方想后退。";
+  }
+  if (/宝贝|老婆|老公|亲爱的|爱你|喜欢我吗/.test(clean) && state.socialPractice.closeness < 55) {
+    trustDelta -= 3;
+    comfortDelta -= 6;
+    feedback = "小暖还没准备好太快的亲昵称呼。关系刚开始时，慢一点更容易建立信任。";
+  }
+  if (clean.length >= 8 && trustDelta === 0 && comfortDelta === 0 && closenessDelta === 0) {
+    trustDelta += 1;
+    comfortDelta += 1;
+  }
+
+  state.socialPractice.trust = clampScore(state.socialPractice.trust + trustDelta);
+  state.socialPractice.comfort = clampScore(state.socialPractice.comfort + comfortDelta);
+  state.socialPractice.closeness = clampScore(state.socialPractice.closeness + closenessDelta);
+  state.socialPractice.lastFeedback = feedback;
+  if (Math.abs(trustDelta) + Math.abs(comfortDelta) + Math.abs(closenessDelta) >= 7) {
+    addCompanionLifeEvent({
+      type: "social_practice",
+      title: trustDelta + comfortDelta + closenessDelta >= 0 ? "一次舒服的靠近" : "一次边界提醒",
+      summary: feedback,
+      source: "social_practice",
+    });
+  }
+  persist();
+  renderSocialPractice();
+}
+
 function renderRelationshipNote() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
@@ -984,6 +1398,9 @@ function renderRelationshipNote() {
     trusted_friend: `你已经让小暖了解了一些重要边界。小暖会更像熟悉的朋友，但仍然由你决定哪些能被记住。`,
   }[stage.level];
   relationshipNoteEl.textContent = copy || "";
+  renderGrowthCard();
+  renderSocialPractice();
+  renderMemoryPermissionSettings();
 }
 
 async function initSupabase() {
@@ -1038,13 +1455,13 @@ function updateAuthUi() {
   if (!state.supabase) {
     authToggleEl.textContent = "登录";
     authToggleEl.disabled = false;
-    authToggleEl.title = "部署并配置 Supabase 后，可以使用邮箱或 Google 登录";
+    authToggleEl.title = "部署并配置 Supabase 后，可以使用 Google 登录";
     accountCardEl.classList.add("hidden");
     authSocialEl.classList.remove("hidden");
-    authFormEl.classList.remove("hidden");
-    authSwitchEl.classList.remove("hidden");
-    authTitleEl.textContent = state.authMode === "signup" ? "Create Account" : "Sign In";
-    authSubtitleEl.textContent = "这里会成为你的私人账号入口。配置 Supabase 后，就能用邮箱或 Google 登录。";
+    authFormEl.classList.add("hidden");
+    authSwitchEl.classList.add("hidden");
+    authTitleEl.textContent = "登录小暖";
+    authSubtitleEl.textContent = "登录后，小暖下次才能认出你，并只保存你明确允许记下的事。";
     authSubmitEl.textContent = state.authMode === "signup" ? "Create Free Account" : "Sign in";
     authSwitchCopyEl.textContent = state.authMode === "signup" ? "Already have an account?" : "没有账号？";
     authModeToggleEl.textContent = state.authMode === "signup" ? "Sign in" : "Create account";
@@ -1060,15 +1477,15 @@ function updateAuthUi() {
   authToggleEl.title = signedIn ? `已用 ${email || "当前账号"} 登录` : "登录后，小暖可以保存你授权留下的记忆";
   accountEmailEl.textContent = email || "当前账号";
   accountCardEl.classList.toggle("hidden", !signedIn || state.passwordRecovery);
-  authFormEl.classList.toggle("hidden", signedIn && !state.passwordRecovery);
+  authFormEl.classList.toggle("hidden", signedIn || !state.passwordRecovery);
   authSocialEl.classList.toggle("hidden", signedIn || state.passwordRecovery);
-  authSwitchEl.classList.toggle("hidden", signedIn || state.passwordRecovery);
-  authTitleEl.textContent = state.passwordRecovery ? "Reset Password" : signedIn ? "你的账号" : state.authMode === "signup" ? "Create Account" : "Sign In";
+  authSwitchEl.classList.add("hidden");
+  authTitleEl.textContent = state.passwordRecovery ? "Reset Password" : signedIn ? "你的账号" : "登录小暖";
   authSubtitleEl.textContent = signedIn
     ? state.passwordRecovery
       ? "输入一个新密码。改好以后，你就可以继续回到小暖这里。"
       : "你可以在这里确认账号、设置自动退出，或离开时清除这台设备上的记录。"
-    : "登录后，小暖才会在下次认出你，并只保存你明确允许记下的事。";
+    : "用 Google 登录后，小暖才会在下次认出你，并只保存你明确允许记下的事。";
   authSubmitEl.textContent = state.passwordRecovery ? "Update Password" : state.authMode === "signup" ? "Create Free Account" : "Sign in";
   authSwitchCopyEl.textContent = state.authMode === "signup" ? "Already have an account?" : "没有账号？";
   authModeToggleEl.textContent = state.authMode === "signup" ? "Sign in" : "Create account";
@@ -1087,6 +1504,11 @@ function clearStoredPrivateCache() {
   localStorage.removeItem("nuanyou-memory-login-notice");
   localStorage.removeItem("nuanyou-cognition-core");
   localStorage.removeItem("nuanyou-nudge-stats");
+  localStorage.removeItem("nuanyou-social-practice");
+  localStorage.removeItem("nuanyou-social-trust");
+  localStorage.removeItem("nuanyou-social-comfort");
+  localStorage.removeItem("nuanyou-social-closeness");
+  localStorage.removeItem("nuanyou-social-feedback");
 }
 
 async function loadCloudState() {
@@ -1140,13 +1562,23 @@ async function loadCloudState() {
         ...defaultCognitionCore.learnedStyle,
         ...(companionCore.core.learnedStyle || {}),
       },
+      memorySettings: {
+        ...defaultCognitionCore.memorySettings,
+        ...(companionCore.core.memorySettings || {}),
+      },
+      lifeEvents: companionCore.core.lifeEvents || [],
     };
     state.nudgeStats = companionCore.nudge_stats || {};
+    state.socialPractice = {
+      ...state.socialPractice,
+      ...(companionCore.core.socialPractice || {}),
+    };
     saveCognitionCore({ localOnly: true });
     saveNudgeStats({ localOnly: true });
   } else {
     await saveCognitionCoreRemote();
   }
+  ensureCompanionFirstMeet();
 
   persist();
   appShellEl.classList.toggle("intro-mode", !state.profile);
@@ -1174,6 +1606,13 @@ async function syncLocalStateRemote() {
 
 async function saveCognitionCoreRemote() {
   if (!state.supabase || !state.session) return;
+  state.cognitionCore.socialPractice = {
+    enabled: state.socialPractice.enabled,
+    trust: state.socialPractice.trust,
+    comfort: state.socialPractice.comfort,
+    closeness: state.socialPractice.closeness,
+    lastFeedback: state.socialPractice.lastFeedback,
+  };
   await state.supabase.from("companion_cores").upsert({
     user_id: state.session.user.id,
     core: state.cognitionCore,
@@ -1293,6 +1732,7 @@ function forgetMemories(memories) {
   memories.forEach((memory) => deleteMemoryRemote(memory.id));
   persist();
   renderRecords();
+  renderRelationshipNote();
 }
 
 function addMemoryCandidate(candidate) {
@@ -1305,6 +1745,36 @@ function addMemoryCandidate(candidate) {
   });
   persist();
   renderRecords();
+}
+
+function captureMemoryCheckInProgress(text) {
+  if (!state.pendingMemoryCheckIn || !state.session) return null;
+  const reply = text.trim();
+  if (!reply || /先不说|不想说|不用|没事|算了|跳过/.test(reply)) {
+    state.pendingMemoryCheckIn = null;
+    return null;
+  }
+  const original = state.pendingMemoryCheckIn.content || "之前那件事";
+  const candidate = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    type: "progress",
+    content: `关于「${original.slice(0, 48)}」的新进展：${reply.slice(0, 140)}`,
+    prompt: `你刚刚补充了这件事的新进展。要不要让我以后也记得？“${reply.slice(0, 120)}”`,
+    createdAt: new Date().toISOString(),
+    source: "memory_check_in",
+  };
+  state.pendingMemoryCheckIn = null;
+  if (saveMemoryDirectly(candidate)) {
+    return candidate;
+  }
+  addMemoryCandidate(candidate);
+  addCompanionLifeEvent({
+    type: "memory_follow_up",
+    title: "回访了一件旧事",
+    summary: `小暖根据已授权记忆询问了近况，并等待用户决定是否保存新进展。`,
+    source: "memory_check_in",
+  });
+  return candidate;
 }
 
 function maybePromptMemoryInbox() {
@@ -1336,8 +1806,27 @@ function saveMemoryCandidate(candidateId) {
     createdAt: candidate.createdAt || new Date().toISOString(),
   };
   state.memories.unshift(memory);
+  rememberCompanionLearnedMemory(memory);
   removeMemoryCandidate(candidateId);
+  renderRelationshipNote();
   syncMemory(memory);
+}
+
+function saveMemoryDirectly(candidate) {
+  if (!candidate || !state.session || !canDirectlyRememberType(candidate.type)) return false;
+  const memory = {
+    ...candidate,
+    status: "active",
+    createdAt: candidate.createdAt || new Date().toISOString(),
+  };
+  state.memories.unshift(memory);
+  rememberCompanionLearnedMemory(memory);
+  persist();
+  renderRecords();
+  renderRelationshipNote();
+  syncMemory(memory);
+  addMessage("friend", `${getMemorySavedReply(memory)}\n\n这类事是你允许我直接记下的。如果你之后想改，去记录页把授权取消就好。`, "soft-nudge");
+  return true;
 }
 
 function getMemorySavedReply(memory) {
@@ -1355,6 +1844,9 @@ function getMemorySavedReply(memory) {
   }
   if (memory.type === "support") {
     return `好，我会记住这个对你有用的办法。等你下次又很累的时候，我可以轻轻把它递回来，不让你一个人硬想。`;
+  }
+  if (memory.type === "progress") {
+    return `好，我会把这个新进展接到那件旧事后面。以后再提起时，我不会只记得开头，也会记得它后来发生了变化。`;
   }
   return "好，我会认真记住这件事。不是为了给你贴标签，是为了以后更小心、更像一个懂你的人。";
 }
@@ -1530,6 +2022,7 @@ async function getAiReply(text, onDelta) {
         memories: state.memories.slice(0, 20),
         companionStage: getCompanionStage(),
         cognitionCore: summarizeCognitionCore(),
+        socialPractice: state.socialPractice,
         history,
         stream: true,
       }),
@@ -1560,9 +2053,12 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   cancelDraftNudge();
   cancelQuestionFollowup();
   cancelAmbientNudge();
+  cancelMemoryCheckIn();
   const proactivePreference = detectProactivePreference(text);
   resolvePendingNudge(proactivePreference === false ? "quieted" : "responded");
   learnFromUserFeedback(text);
+  updateSocialPracticeFromUser(text);
+  const checkInCandidate = captureMemoryCheckInProgress(text);
   addMessage("user", text);
   inputEl.value = "";
   resetInputActivity();
@@ -1620,10 +2116,17 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         }
         if (memoryCandidate?.type === "identity") {
           showMemoryRequest(memoryCandidate);
+        } else if (checkInCandidate) {
+          if (!canDirectlyRememberType(checkInCandidate.type)) {
+            addMessage("friend", "我把这个新进展先放进记忆收纳箱了。等你愿意时，可以去记录里决定要不要真的留下。", "soft-nudge");
+            maybePromptMemoryInbox();
+          }
         } else if (memoryCandidate) {
           if (state.session) {
-            addMemoryCandidate(memoryCandidate);
-            maybePromptMemoryInbox();
+            if (!saveMemoryDirectly(memoryCandidate)) {
+              addMemoryCandidate(memoryCandidate);
+              maybePromptMemoryInbox();
+            }
           } else {
             addMessage("friend", "这句话像是值得以后记住的事。不过现在是随便聊聊，我不会留下记录。等你登录后，可以自己决定哪些事放进记忆。");
           }
@@ -1638,11 +2141,17 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
 inputEl.addEventListener("input", handleInputActivity);
 inputEl.addEventListener("focus", handleInputActivity);
 inputEl.addEventListener("blur", cancelDraftNudge);
+inputEl.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
+});
 
 document.querySelector("#clear-chat").addEventListener("click", () => {
   cancelDraftNudge();
   cancelQuestionFollowup();
   cancelAmbientNudge();
+  cancelMemoryCheckIn();
   resetInputActivity();
   state.messages = [];
   persist();
@@ -1669,10 +2178,12 @@ document.querySelector("#remember-yes").addEventListener("click", () => {
     rememberPreferredName(memory.name);
   }
   state.memories.unshift(memory);
+  rememberCompanionLearnedMemory(memory);
   addMessage("friend", getMemorySavedReply(memory));
   hideMemoryRequest();
   persist();
   renderRecords();
+  renderRelationshipNote();
   syncMemory(memory);
 });
 
@@ -1725,6 +2236,7 @@ document.querySelector("#intro-form").addEventListener("submit", (event) => {
     metAt: new Date().toISOString(),
   };
   state.messages = [];
+  ensureCompanionFirstMeet();
   persist();
   renderMessages();
   switchView("chat");
@@ -1806,8 +2318,8 @@ memoryLoginButtonEl.addEventListener("click", () => {
     return;
   }
   authPanelEl.classList.remove("hidden");
-  authStatusEl.textContent = "你可以用邮箱建立账号，或直接用 Google 登录。登录后，小暖只会同步你允许记下的事。";
-  document.querySelector("#auth-email").focus();
+  authStatusEl.textContent = "用 Google 登录后，小暖只会同步你允许记下的事。";
+  googleLoginEl.focus();
 });
 
 recordsLoginButtonEl.addEventListener("click", () => {
@@ -1815,7 +2327,7 @@ recordsLoginButtonEl.addEventListener("click", () => {
   authStatusEl.textContent = state.supabase
     ? "登录后才会开启私人日记本；随便聊聊时不会留下本机记录。"
     : "当前环境还没有连上 Supabase 登录配置。请先用线上 Vercel 地址打开网站。";
-  document.querySelector("#auth-email")?.focus();
+  googleLoginEl.focus();
 });
 
 privacyTimeoutSelectEl.addEventListener("change", () => {
@@ -1830,6 +2342,35 @@ proactiveCueToggleEl.addEventListener("click", () => {
   }
   setProactiveMode("quiet", { boundary: true });
   addMessage("friend", "好，我先安静一点。你发出来以后，我再认真接住。", "soft-nudge");
+});
+
+socialModeToggleEl.addEventListener("click", () => {
+  state.socialPractice.enabled = !state.socialPractice.enabled;
+  state.socialPractice.lastFeedback = state.socialPractice.enabled
+    ? "关系成长已开启。你越稳定、真诚、尊重边界，小暖也会越安心，越愿意把你当成好朋友。"
+    : "关系成长已收起。小暖还是会像朋友一样陪你聊天，只是不再显示亲密度反馈。";
+  persist();
+  renderSocialPractice();
+  addMessage("friend", state.socialPractice.lastFeedback, "soft-nudge");
+});
+
+memoryPermissionInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (!canUseDirectMemory()) {
+      renderMemoryPermissionSettings();
+      return;
+    }
+    const selected = [...memoryPermissionInputs].filter((item) => item.checked).map((item) => item.value);
+    setDirectMemoryTypes(selected);
+    addCompanionLifeEvent({
+      type: "memory_permission",
+      title: "调整了直接记忆授权",
+      summary: selected.length
+        ? `用户允许小暖直接记下这些类型：${selected.join("、")}。`
+        : "用户取消了直接记忆授权，小暖继续全部先询问。",
+      source: "user_permission",
+    });
+  });
 });
 
 googleLoginEl.addEventListener("click", async () => {
@@ -1948,8 +2489,10 @@ function switchView(view) {
   }
   if (view === "chat") {
     scheduleAmbientNudge(9000);
+    scheduleMemoryCheckIn(18000);
   } else {
     cancelAmbientNudge();
+    cancelMemoryCheckIn();
   }
 }
 
@@ -1984,6 +2527,7 @@ document.querySelector("#clear-all-records").addEventListener("click", () => {
   persist();
   renderMessages();
   renderRecords();
+  renderRelationshipNote();
   messageIds.forEach((id) => deleteMessageRemote(id));
   memoryIds.forEach((id) => deleteMemoryRemote(id));
 });
@@ -2066,6 +2610,7 @@ document.querySelector("#records-view").addEventListener("click", (event) => {
   if (memoryId) {
     state.memories = state.memories.filter((memory) => memory.id !== memoryId);
     deleteMemoryRemote(memoryId);
+    renderRelationshipNote();
   }
   if (messageId) {
     deleteMessagesByIds([messageId]);
@@ -2205,6 +2750,7 @@ initSupabase();
 startPrivacyTimer();
 
 if (state.profile) {
+  ensureCompanionFirstMeet();
   appShellEl.classList.remove("intro-mode");
   topEyebrowEl.textContent = state.profile.name ? `欢迎你，${state.profile.name}` : "欢迎回来";
   switchView("chat");
