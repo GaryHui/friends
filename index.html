@@ -283,23 +283,59 @@
         </section>
 
         <section class="view" id="records-view" aria-labelledby="records-heading">
-          <section class="panel records-panel">
+          <section class="panel records-panel diary-panel">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">你的记录</p>
+                <p class="eyebrow">私人日记本</p>
                 <h3 id="records-heading">你可以决定哪些留下，哪些删掉</h3>
               </div>
               <button class="ghost-button" id="clear-all-records" type="button">全部清空</button>
             </div>
-            <div class="records-grid">
-              <section>
-                <p class="eyebrow">小暖记得的事</p>
-                <div class="record-list" id="memory-list"></div>
-              </section>
-              <section>
-                <p class="eyebrow">聊过的话</p>
-                <div class="record-list" id="chat-record-list"></div>
-              </section>
+
+            <div class="diary-closed" id="diary-closed">
+              <button class="ebook-cover" id="open-diary" type="button" aria-label="翻开私人日记本">
+                <span class="ebook-cover-ridge" aria-hidden="true"></span>
+                <span class="ebook-cover-title">私人日记本</span>
+                <span class="ebook-cover-subtitle">小暖和你聊过的话</span>
+                <span class="ebook-cover-action">点一下翻开</span>
+              </button>
+              <div>
+                <p class="eyebrow">只属于你的回看</p>
+                <p>每天聊过的话会像电子书一样收成一页。你可以前后翻页，勾选几条删除，也可以把某一天整页清掉。</p>
+              </div>
+            </div>
+
+            <div class="diary-open hidden" id="diary-open">
+              <div class="diary-toolbar">
+                <button class="ghost-button" id="close-diary" type="button">合上</button>
+                <button class="ghost-button" id="prev-diary-page" type="button">上一页</button>
+                <button class="ghost-button" id="next-diary-page" type="button">下一页</button>
+                <button class="ghost-button" id="select-day-records" type="button">选择本页</button>
+                <button class="ghost-button" id="keep-selected-records" type="button">取消选择</button>
+                <button class="ghost-button danger-button" id="delete-selected-records" type="button">删除选中</button>
+                <button class="ghost-button danger-button" id="delete-day-records" type="button">删除本页</button>
+              </div>
+
+              <div class="diary-book" id="diary-book">
+                <aside class="diary-days" id="diary-days" aria-label="按日期选择聊天记录"></aside>
+                <section class="diary-page diary-left-page">
+                  <p class="eyebrow">目录和便签</p>
+                  <div class="diary-memory-block">
+                    <p class="eyebrow">小暖夹在本子里的便签</p>
+                    <div class="record-list" id="memory-list"></div>
+                  </div>
+                </section>
+                <section class="diary-page diary-right-page" aria-live="polite">
+                  <div class="diary-page-heading">
+                    <div>
+                      <p class="eyebrow">聊天页</p>
+                      <h4 id="diary-date-title">还没有聊天记录</h4>
+                    </div>
+                    <span id="diary-selected-count">未选择</span>
+                  </div>
+                  <div class="diary-entry-list" id="diary-entry-list"></div>
+                </section>
+              </div>
             </div>
           </section>
         </section>

@@ -9,6 +9,9 @@ const state = {
   session: null,
   breathTimer: null,
   breathIndex: 0,
+  diaryOpen: false,
+  diaryPageIndex: 0,
+  selectedDiaryMessages: new Set(),
   memoryLoginNoticeShown: localStorage.getItem("nuanyou-memory-login-notice") === "1",
 };
 
@@ -43,7 +46,13 @@ const appShellEl = document.querySelector("#app-shell");
 const memoryRequestEl = document.querySelector("#memory-request");
 const memoryTextEl = document.querySelector("#memory-text");
 const memoryListEl = document.querySelector("#memory-list");
-const chatRecordListEl = document.querySelector("#chat-record-list");
+const diaryClosedEl = document.querySelector("#diary-closed");
+const diaryOpenEl = document.querySelector("#diary-open");
+const diaryBookEl = document.querySelector("#diary-book");
+const diaryDaysEl = document.querySelector("#diary-days");
+const diaryDateTitleEl = document.querySelector("#diary-date-title");
+const diarySelectedCountEl = document.querySelector("#diary-selected-count");
+const diaryEntryListEl = document.querySelector("#diary-entry-list");
 const authPanelEl = document.querySelector("#auth-panel");
 const authToggleEl = document.querySelector("#auth-toggle");
 const authFormEl = document.querySelector("#auth-form");
@@ -147,9 +156,53 @@ function formatTime(value) {
   });
 }
 
+function formatDiaryDate(value) {
+  return new Date(value).toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+}
+
+function getDiaryDayKey(value) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDiaryPages() {
+  const pages = new Map();
+  state.messages
+    .filter((message) => message.text)
+    .forEach((message) => {
+      const key = getDiaryDayKey(message.at);
+      if (!pages.has(key)) {
+        pages.set(key, {
+          key,
+          title: formatDiaryDate(message.at),
+          messages: [],
+        });
+      }
+      pages.get(key).messages.push(message);
+    });
+  return [...pages.values()].sort((a, b) => b.key.localeCompare(a.key));
+}
+
+function clampDiaryPage() {
+  const pages = getDiaryPages();
+  if (pages.length === 0) {
+    state.diaryPageIndex = 0;
+    return pages;
+  }
+  state.diaryPageIndex = Math.max(0, Math.min(state.diaryPageIndex, pages.length - 1));
+  return pages;
+}
+
 function renderRecords() {
   memoryListEl.innerHTML = "";
-  chatRecordListEl.innerHTML = "";
 
   if (state.memories.length === 0) {
     memoryListEl.innerHTML = '<p class="muted">还没有长期记忆。小暖想记住什么，会先问你。</p>';
@@ -168,23 +221,105 @@ function renderRecords() {
     });
   }
 
-  const userVisibleMessages = state.messages.filter((message) => message.text);
-  if (userVisibleMessages.length === 0) {
-    chatRecordListEl.innerHTML = '<p class="muted">还没有聊天记录。</p>';
-  } else {
-    userVisibleMessages.forEach((message) => {
-      const item = document.createElement("article");
-      item.className = "record-item";
-      item.innerHTML = `
-        <p>${message.text}</p>
-        <div class="record-meta">
-          <span>${message.role === "friend" ? "小暖" : "你"} · ${formatTime(message.at)}</span>
-          <button class="delete-record" data-message-id="${message.id}" type="button">删除</button>
-        </div>
-      `;
-      chatRecordListEl.appendChild(item);
-    });
+  diaryClosedEl.classList.toggle("hidden", state.diaryOpen);
+  diaryOpenEl.classList.toggle("hidden", !state.diaryOpen);
+  const pages = clampDiaryPage();
+  diaryDaysEl.innerHTML = "";
+  diaryEntryListEl.innerHTML = "";
+
+  if (pages.length === 0) {
+    diaryDateTitleEl.textContent = "还没有聊天记录";
+    diarySelectedCountEl.textContent = "未选择";
+    diaryDaysEl.innerHTML = '<p class="muted">开始聊几句后，这里会自动变成按天翻看的页面。</p>';
+    diaryEntryListEl.innerHTML = '<p class="muted">这里还很空。等你和小暖聊过的话，会像电子书一样收在这里。</p>';
+    return;
   }
+
+  pages.forEach((page, index) => {
+    const button = document.createElement("button");
+    button.className = `diary-day ${index === state.diaryPageIndex ? "active" : ""}`.trim();
+    button.type = "button";
+    button.dataset.pageIndex = index;
+    button.innerHTML = `<span>${page.title}</span><small>${page.messages.length} 条</small>`;
+    diaryDaysEl.appendChild(button);
+  });
+
+  const page = pages[state.diaryPageIndex];
+  diaryDateTitleEl.textContent = page.title;
+  const selectedOnPage = page.messages.filter((message) => state.selectedDiaryMessages.has(message.id));
+  diarySelectedCountEl.textContent = selectedOnPage.length ? `已选择 ${selectedOnPage.length} 条` : `第 ${state.diaryPageIndex + 1} / ${pages.length} 页`;
+
+  page.messages.forEach((message) => {
+    const item = document.createElement("article");
+    item.className = "diary-entry";
+    item.innerHTML = `
+      <input type="checkbox" data-diary-select="${message.id}" ${state.selectedDiaryMessages.has(message.id) ? "checked" : ""} aria-label="选择这条记录" />
+      <div>
+        <small>${message.role === "friend" ? "小暖" : "你"} · ${formatTime(message.at)}</small>
+        <p>${message.text}</p>
+      </div>
+      <div class="diary-entry-actions">
+        <button data-diary-keep="${message.id}" type="button">保留</button>
+        <button class="delete-record" data-message-id="${message.id}" type="button">删除</button>
+      </div>
+    `;
+    diaryEntryListEl.appendChild(item);
+  });
+}
+
+function turnDiaryPage(direction) {
+  const pages = getDiaryPages();
+  if (pages.length === 0) return;
+  const nextIndex = Math.max(0, Math.min(state.diaryPageIndex + direction, pages.length - 1));
+  if (nextIndex === state.diaryPageIndex) return;
+  state.diaryPageIndex = nextIndex;
+  diaryBookEl.classList.remove("flipping-next", "flipping-prev");
+  diaryBookEl.classList.add(direction > 0 ? "flipping-next" : "flipping-prev");
+  renderRecords();
+  window.setTimeout(() => {
+    diaryBookEl.classList.remove("flipping-next", "flipping-prev");
+  }, 360);
+}
+
+function deleteMessagesByIds(messageIds) {
+  if (messageIds.length === 0) return;
+  state.messages = state.messages.filter((message) => !messageIds.includes(message.id));
+  messageIds.forEach((id) => {
+    state.selectedDiaryMessages.delete(id);
+    deleteMessageRemote(id);
+  });
+  persist();
+  renderMessages();
+  renderRecords();
+}
+
+function deleteCurrentDiaryPage() {
+  const pages = clampDiaryPage();
+  const page = pages[state.diaryPageIndex];
+  if (!page) return;
+  deleteMessagesByIds(page.messages.map((message) => message.id));
+}
+
+function clearDiarySelection() {
+  state.selectedDiaryMessages.clear();
+  renderRecords();
+}
+
+function selectCurrentDiaryPage() {
+  const pages = clampDiaryPage();
+  const page = pages[state.diaryPageIndex];
+  if (!page) return;
+  page.messages.forEach((message) => state.selectedDiaryMessages.add(message.id));
+  renderRecords();
+}
+
+function toggleDiaryMessage(messageId, isSelected) {
+  if (isSelected) {
+    state.selectedDiaryMessages.add(messageId);
+  } else {
+    state.selectedDiaryMessages.delete(messageId);
+  }
+  renderRecords();
 }
 
 function getOpeningMessage() {
@@ -759,6 +894,7 @@ document.querySelector("#clear-all-records").addEventListener("click", () => {
   const memoryIds = state.memories.map((memory) => memory.id);
   state.messages = [];
   state.memories = [];
+  state.selectedDiaryMessages.clear();
   persist();
   renderMessages();
   renderRecords();
@@ -766,20 +902,80 @@ document.querySelector("#clear-all-records").addEventListener("click", () => {
   memoryIds.forEach((id) => deleteMemoryRemote(id));
 });
 
+document.querySelector("#open-diary").addEventListener("click", () => {
+  state.diaryOpen = true;
+  renderRecords();
+});
+
+document.querySelector("#close-diary").addEventListener("click", () => {
+  state.diaryOpen = false;
+  clearDiarySelection();
+});
+
+document.querySelector("#prev-diary-page").addEventListener("click", () => {
+  turnDiaryPage(-1);
+});
+
+document.querySelector("#next-diary-page").addEventListener("click", () => {
+  turnDiaryPage(1);
+});
+
+document.querySelector("#keep-selected-records").addEventListener("click", () => {
+  clearDiarySelection();
+});
+
+document.querySelector("#select-day-records").addEventListener("click", () => {
+  selectCurrentDiaryPage();
+});
+
+document.querySelector("#delete-selected-records").addEventListener("click", () => {
+  deleteMessagesByIds([...state.selectedDiaryMessages]);
+});
+
+document.querySelector("#delete-day-records").addEventListener("click", () => {
+  deleteCurrentDiaryPage();
+});
+
 document.querySelector("#records-view").addEventListener("click", (event) => {
   const memoryId = event.target.dataset.memoryId;
   const messageId = event.target.dataset.messageId;
+  const diaryKeepId = event.target.dataset.diaryKeep;
+  const pageIndex = event.target.dataset.pageIndex;
+  if (pageIndex !== undefined) {
+    const nextIndex = Number(pageIndex);
+    if (!Number.isNaN(nextIndex)) {
+      const direction = nextIndex > state.diaryPageIndex ? 1 : -1;
+      state.diaryPageIndex = nextIndex;
+      diaryBookEl.classList.remove("flipping-next", "flipping-prev");
+      diaryBookEl.classList.add(direction > 0 ? "flipping-next" : "flipping-prev");
+      renderRecords();
+      window.setTimeout(() => {
+        diaryBookEl.classList.remove("flipping-next", "flipping-prev");
+      }, 360);
+    }
+  }
+  if (diaryKeepId) {
+    state.selectedDiaryMessages.delete(diaryKeepId);
+    renderRecords();
+  }
   if (memoryId) {
     state.memories = state.memories.filter((memory) => memory.id !== memoryId);
     deleteMemoryRemote(memoryId);
   }
   if (messageId) {
-    state.messages = state.messages.filter((message) => message.id !== messageId);
-    deleteMessageRemote(messageId);
+    deleteMessagesByIds([messageId]);
+    return;
   }
   persist();
   renderMessages();
   renderRecords();
+});
+
+document.querySelector("#records-view").addEventListener("change", (event) => {
+  const messageId = event.target.dataset.diarySelect;
+  if (messageId) {
+    toggleDiaryMessage(messageId, event.target.checked);
+  }
 });
 
 const moodRange = document.querySelector("#mood-range");
