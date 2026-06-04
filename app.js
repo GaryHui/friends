@@ -2628,6 +2628,50 @@ function isAskingKnownIdentity(text) {
   return /(你知道我是谁|你还记得我吗|你记得我吗|我是谁|我的名字|我叫什么|你知道我叫什么)/.test(text);
 }
 
+function getActiveMemories() {
+  return state.memories.filter((memory) => memory?.status !== "deleted" && memory?.content);
+}
+
+function getMemoryQuestionType(text) {
+  if (!/(你记得|你知道|你了解|你还记得|记住了|记下了|记得我|关于我|我的)/.test(text)) return "";
+  if (/(全部|什么|哪些|所有|记得我什么|关于我)/.test(text)) return "all";
+  if (/(喜欢|偏好|怎么陪|陪伴方式|不喜欢你|希望你)/.test(text)) return "preference";
+  if (/(性格|节奏|慢热|敏感|内向|外向|焦虑|紧张)/.test(text)) return "personality";
+  if (/(边界|触发|难受|害怕|最怕|崩溃|雷区)/.test(text)) return "trigger";
+  if (/(有用|办法|支持|舒服|好一点|缓过来)/.test(text)) return "support";
+  if (/(进展|后来|那件事|旧事)/.test(text)) return "progress";
+  if (/(名字|称呼|我是谁|叫什么)/.test(text)) return "identity";
+  return "";
+}
+
+function getMemoriesForQuestion(type) {
+  const memories = getActiveMemories();
+  if (!type) return [];
+  if (type === "all") return memories;
+  return memories.filter((memory) => {
+    if (type === "identity") return memory.type === "identity" || extractPreferredName(memory.content || "");
+    return memory.type === type;
+  });
+}
+
+function makeKnownMemoryAnswer(text) {
+  const type = getMemoryQuestionType(text);
+  if (!type) return "";
+  const memories = getMemoriesForQuestion(type);
+  if (!memories.length) {
+    const topic = type === "all" ? "长期记忆" : getMemoryTypeLabel(type);
+    return `这部分我现在没有长期记下来。\n\n如果你愿意让我以后记得，可以直接说“记住：……”；我会先确认，再放进你的记录里。`;
+  }
+  const shown = memories.slice(0, type === "all" ? 6 : 4);
+  const lines = shown.map((memory) => {
+    const name = memory.type === "identity" ? extractPreferredName(memory.content || "") : "";
+    const content = name ? `你希望我叫你 ${name}` : memory.content;
+    return `- ${getMemoryTypeLabel(memory.type)}：${content}`;
+  });
+  const more = memories.length > shown.length ? `\n\n还有 ${memories.length - shown.length} 条，我先不一下子全翻出来。你可以去“记录”里慢慢看。` : "";
+  return `记得。这些是你允许我留下的，不是我偷偷猜的：\n\n${lines.join("\n")}${more}`;
+}
+
 function forgetMemories(memories) {
   if (!memories.length) return;
   const ids = new Set(memories.map((memory) => memory.id));
@@ -3005,6 +3049,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   const forgetMatches = findMemoriesToForget(text);
   const memoryCandidate = detectMemoryCandidate(text);
   const knownName = getKnownPreferredName();
+  const knownMemoryAnswer = makeKnownMemoryAnswer(text);
 
   window.setTimeout(async () => {
     try {
@@ -3025,6 +3070,8 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
       } else if (isAskingKnownIdentity(text) && knownName) {
         rememberPreferredName(knownName);
         addMessage("friend", `记得。你让我叫你 ${knownName}。\n\n这个名字是你点头让我留下的，所以我下次见到你，也应该认得出来。`);
+      } else if (knownMemoryAnswer) {
+        addMessage("friend", knownMemoryAnswer);
       } else {
         let streamedMessage = null;
         const reply = await getAiReply(text, (_delta, fullText) => {
