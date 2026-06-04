@@ -100,6 +100,17 @@ function makeClosenessReply(text = "", name = "") {
   return `${call}我抱抱你。\n\n不是敷衍一下的那种，是先把你从硬撑里接出来。你可以靠一会儿，不用马上说清楚。`;
 }
 
+function isIdentityCheck(text = "") {
+  return /(我是谁|你知道我是谁|你还记得我吗|你记得我吗|我的名字|我叫什么|你知道我叫什么)/.test(text);
+}
+
+function makeIdentityReply(name = "") {
+  if (!name) {
+    return "我还没有稳稳记下你的名字。\n\n你愿意的话，可以告诉我一次；我会先问你要不要留下，再记进属于你的那本记录里。";
+  }
+  return `${name}。\n\n我记得你。这不是一句标准答案，是我应该认出来的人。`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -183,6 +194,16 @@ export default async function handler(req, res) {
     .join("\n");
   const memoryName = findNameFromMemories(memorySource);
   const displayName = dbProfile?.nickname || profile?.name || memoryName;
+
+  if (isIdentityCheck(message)) {
+    const reply = makeIdentityReply(displayName);
+    if (stream) {
+      sendTextStream(res, reply);
+      return;
+    }
+    res.status(200).json({ reply });
+    return;
+  }
 
   if (isClosenessRequest(message)) {
     const reply = makeClosenessReply(message, displayName);
