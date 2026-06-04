@@ -255,7 +255,7 @@ using (auth.uid() = user_id);
 用户投喂素材 -> 千问整理成原则 -> status=pending -> 用户点采用 -> status=approved -> 写进 companion_cores.core.emotionalIntelligence
 ```
 
-建表 SQL：
+建表 SQL 可以直接复制仓库根目录的 `supabase-companion-lessons.sql` 到 Supabase SQL Editor 执行。内容如下：
 
 ```sql
 create table if not exists companion_lessons (
@@ -281,6 +281,9 @@ drop policy if exists "companion_lessons_select_own" on companion_lessons;
 create policy "companion_lessons_select_own"
 on companion_lessons for select
 using (auth.uid() = user_id);
+
+create index if not exists companion_lessons_user_status_created_idx
+on companion_lessons (user_id, status, created_at desc);
 ```
 
 插入、更新和审核建议只走 Vercel 后端的 service role，不开放给前端直接写。这样用户可以看到自己的学习卡，但不能伪造审核状态。

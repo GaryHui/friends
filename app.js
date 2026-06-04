@@ -38,6 +38,8 @@ const defaultCognitionCore = {
     personalityTexture: "",
   },
   activeScene: null,
+  sceneProgress: {},
+  actionProgress: {},
   lifeEvents: [],
   updatedAt: "",
 };
@@ -2007,6 +2009,16 @@ function growRelationshipFromAction({ trust = 0, comfort = 0, closeness = 0, fee
   state.socialPractice.comfort = clampScore(state.socialPractice.comfort + comfort);
   state.socialPractice.closeness = clampScore(state.socialPractice.closeness + closeness);
   state.socialPractice.lastFeedback = feedback || state.socialPractice.lastFeedback;
+  syncSocialPracticeToCore();
+  if (event) addCompanionLifeEvent(event);
+  persist();
+  renderSocialPractice();
+  renderRelationshipNote();
+  renderRecords();
+  saveCognitionCore();
+}
+
+function syncSocialPracticeToCore() {
   state.cognitionCore.socialPractice = {
     enabled: state.socialPractice.enabled,
     trust: state.socialPractice.trust,
@@ -2014,12 +2026,53 @@ function growRelationshipFromAction({ trust = 0, comfort = 0, closeness = 0, fee
     closeness: state.socialPractice.closeness,
     lastFeedback: state.socialPractice.lastFeedback,
   };
-  if (event) addCompanionLifeEvent(event);
-  persist();
-  renderSocialPractice();
-  renderRelationshipNote();
-  renderRecords();
-  saveCognitionCore();
+}
+
+function getLocalDayKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getSceneProgress() {
+  state.cognitionCore.sceneProgress = state.cognitionCore.sceneProgress || {};
+  return state.cognitionCore.sceneProgress;
+}
+
+function canRewardScene(sceneId) {
+  const progress = getSceneProgress();
+  const today = getLocalDayKey();
+  return progress[sceneId]?.lastRewardDay !== today;
+}
+
+function markSceneRewarded(sceneId) {
+  const progress = getSceneProgress();
+  progress[sceneId] = {
+    ...(progress[sceneId] || {}),
+    lastRewardDay: getLocalDayKey(),
+    lastRewardedAt: new Date().toISOString(),
+  };
+}
+
+function getActionProgress() {
+  state.cognitionCore.actionProgress = state.cognitionCore.actionProgress || {};
+  return state.cognitionCore.actionProgress;
+}
+
+function canRewardAction(actionId) {
+  const progress = getActionProgress();
+  const today = getLocalDayKey();
+  return progress[actionId]?.lastRewardDay !== today;
+}
+
+function markActionRewarded(actionId) {
+  const progress = getActionProgress();
+  progress[actionId] = {
+    ...(progress[actionId] || {}),
+    lastRewardDay: getLocalDayKey(),
+    lastRewardedAt: new Date().toISOString(),
+  };
 }
 
 function renderSceneCard() {
@@ -2046,31 +2099,47 @@ function startCompanionScene(sceneId) {
   }
   const scene = companionScenes[sceneId];
   if (!scene) return;
+  const previousSceneId = state.cognitionCore.activeScene?.id;
+  const sameScene = previousSceneId === sceneId;
+  const rewardScene = canRewardScene(sceneId);
   state.cognitionCore.activeScene = {
     id: sceneId,
     title: scene.title,
     copy: scene.copy,
     startedAt: new Date().toISOString(),
   };
-  growRelationshipFromAction({
-    trust: scene.deltas.trust,
-    comfort: scene.deltas.comfort,
-    closeness: scene.deltas.closeness,
-    feedback: `你们进入了「${scene.title}」。关系会在这些共同经历里慢慢变得具体。`,
-    event: {
-      type: "shared_scene",
-      title: scene.eventTitle,
-      summary: scene.eventSummary,
-      source: "companion_scene",
-    },
-  });
-  addUniqueLearning("prefer", `在「${scene.title}」场景里，小暖要使用这种方式：${scene.copy}`);
-  addMessage("friend", scene.opening, "soft-nudge");
+  if (rewardScene) {
+    growRelationshipFromAction({
+      trust: scene.deltas.trust,
+      comfort: scene.deltas.comfort,
+      closeness: scene.deltas.closeness,
+      feedback: `你们进入了「${scene.title}」。关系会在这些共同经历里慢慢变得具体。`,
+      event: {
+        type: "shared_scene",
+        title: scene.eventTitle,
+        summary: scene.eventSummary,
+        source: "companion_scene",
+      },
+    });
+    markSceneRewarded(sceneId);
+    addUniqueLearning("prefer", `在「${scene.title}」场景里，小暖要使用这种方式：${scene.copy}`);
+    addMessage("friend", scene.opening, "soft-nudge");
+  } else if (sameScene) {
+    state.socialPractice.lastFeedback = `你们已经在「${scene.title}」里了。关系不会靠反复点按钮变深，要靠真的聊一会儿、一起完成一点小事。`;
+    syncSocialPracticeToCore();
+    addMessage("friend", `我们已经在「${scene.title}」里啦。这个按钮不用一直点，关系不是刷出来的。\n\n你接着刚才那句话说就好，我会顺着你走。`, "soft-nudge");
+  } else {
+    state.socialPractice.lastFeedback = `今晚已经从「${scene.title}」拿过一次共同经历奖励。可以继续换氛围，但成长要靠接下来的真实互动。`;
+    syncSocialPracticeToCore();
+    addMessage("friend", `好，我们换到「${scene.title}」。氛围换了，但今天这个场景的成长就先不重复算啦。\n\n真正会让小暖更靠近你的，是你们接下来怎么聊、怎么一起把一小段时间过完。`, "soft-nudge");
+  }
   inputEl.value = scene.prompt;
   inputEl.focus();
   inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
   handleInputActivity();
   renderSceneCard();
+  renderSocialPractice();
+  saveCognitionCore();
 }
 
 function startRelationshipAction(action) {
@@ -2094,6 +2163,14 @@ function startRelationshipAction(action) {
   }
 
   if (action === "ritual") {
+    if (!canRewardAction("ritual")) {
+      state.socialPractice.lastFeedback = "今晚的小约定已经算过一次成长了。再点按钮不会继续增加关系，真正有用的是你们接下来把话聊下去。";
+      syncSocialPracticeToCore();
+      addMessage("friend", "今晚的小约定已经算过一次啦。再点就有点像刷任务，不像我们真的一起完成了什么。\n\n你要是愿意，我们可以把这个小约定落到一句很具体的话里。", "soft-nudge");
+      renderSocialPractice();
+      saveCognitionCore();
+      return;
+    }
     growRelationshipFromAction({
       trust: 2,
       comfort: 4,
@@ -2106,7 +2183,9 @@ function startRelationshipAction(action) {
         source: "relationship_action",
       },
     });
+    markActionRewarded("ritual");
     addMessage("friend", "好，这算我们今晚一起完成的一小步。不是很大的事，但关系有时候就是靠这种小小的共同经历慢慢变熟。", "soft-nudge");
+    saveCognitionCore();
   }
 }
 
@@ -3260,7 +3339,7 @@ lessonFormEl.addEventListener("submit", async (event) => {
     renderLessons();
   } catch (error) {
     lessonStatusEl.textContent = error.message.includes("companion_lessons")
-      ? "整理失败：Supabase 还没建 companion_lessons 表。请先执行 README 里的小暖进化学习表 SQL。"
+      ? "整理失败：Supabase 还没建 companion_lessons 表。请复制根目录 supabase-companion-lessons.sql 到 Supabase SQL Editor 执行一次。"
       : `整理失败：${error.message}`;
   } finally {
     lessonFormEl.querySelector("button").disabled = false;
