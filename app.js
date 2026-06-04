@@ -417,14 +417,14 @@ async function getAiReply(text) {
       }),
     });
 
+    const data = await response.json();
     if (!response.ok) {
-      return makeReply(text);
+      return `小暖现在还没有连上真正的 AI。\n\n接口返回：${data.error || response.status}\n${data.detail ? `\n细节：${data.detail}` : ""}\n\n你可以先检查 Vercel 环境变量里有没有 DASHSCOPE_API_KEY、QWEN_BASE_URL、QWEN_MODEL。`;
     }
 
-    const data = await response.json();
     return data.reply || makeReply(text);
   } catch {
-    return makeReply(text);
+    return "小暖现在连不上后端接口，所以暂时只能用本地预设回复。请检查 Vercel 是否成功部署了 `/api/chat`，以及浏览器 Network 里 `/api/chat` 是否返回 200。";
   }
 }
 
