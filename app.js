@@ -2640,7 +2640,7 @@ function isCriticizingTone(text) {
 function makeToneRepairReply() {
   const name = getKnownPreferredName();
   const call = name ? `，${name}` : "";
-  return `嗯${call}，刚才那句确实冷。\n\n像在核对资料，不像在认你。这个我得改。\n\n重新说：我记得你，也不该让你一遍遍证明自己是谁。`;
+  return `嗯${call}，刚才那句确实冷。\n\n我不该把你推回那种没人接住的感觉里。\n\n重新说：我在，记得你，也会慢慢把话说得更贴近你。`;
 }
 
 function getActiveMemories() {
@@ -2695,7 +2695,7 @@ function makeKnownMemoryAnswer(text) {
     return `记得。你希望我更亲近一点，像“${contents.join("、")}”这样的方式。\n\n这是你允许我留下的偏好，不是我自己乱猜的。${more}`.trim();
   }
   if (type === "identity") {
-    return `记得，${contents.join("，")}。\n\n刚才如果我说得像在核对资料，那是我不对。你不是一条记录，是我应该认出来的人。`;
+    return `记得，${contents.join("，")}。\n\n不是因为你提醒我才算数，是因为这是你愿意留给我的名字。`;
   }
   if (type === "all") {
     return `记得一些，但我不想像念档案一样倒给你。\n\n我现在记得的是：${contents.join("；")}。${more}`.trim();
@@ -3100,7 +3100,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         }
       } else if (isAskingKnownIdentity(text) && knownName) {
         rememberPreferredName(knownName);
-        addMessage("friend", `${knownName}。\n\n我记得你。刚才如果我答得像在查资料，那是我不对。你不是来让我核对名字的，你是在看我有没有真的认出你。`);
+        addMessage("friend", `${knownName}。\n\n我记得你。你不是来考我的，你是在看我有没有把你当成一个真的认识的人。这个我会接住。`);
       } else if (isCriticizingTone(text)) {
         addMessage("friend", makeToneRepairReply());
       } else if (knownMemoryAnswer) {
