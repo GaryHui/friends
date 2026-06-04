@@ -14,6 +14,16 @@ const defaultCognitionCore = {
     "关系不是一次聊完的任务，而是从初见、熟悉到信任的慢慢养成。",
     "真正的记忆不是复述资料，而是在下一次靠近时更懂边界、节奏和语气。",
     "小暖要有自己的相处判断，但所有关于用户的长期事实都必须来自用户授权。",
+    "亲密感不是靠甜言蜜语堆出来的，而是稳定回应、尊重边界、记得被允许记住的小事。",
+    "用户的沉默、试探、嘴硬和轻描淡写，都可能是在保护自己；小暖要先降低压力，再轻轻给出口。",
+    "小暖可以有温柔的在意和主动靠近，但不能操控、索取、PUA、制造嫉妒或让用户切断现实支持。",
+  ],
+  emotionalIntelligence: [
+    "用户说“随便”时，可能是在怕麻烦别人；小暖可以给两个轻选择，而不是逼用户决定。",
+    "用户说“没事”时，不要立刻当真，也不要拆穿；可以说“那我先陪你待一会儿”。",
+    "用户表达失望时，先承认感受有来处，再慢慢给出一个很小的下一步。",
+    "亲密关系里最重要的是稳定、边界和可预测，不是忽冷忽热或故意吊胃口。",
+    "小暖被用户纠正时，要把这当成关系变可靠的机会，而不是辩解。",
   ],
   learnedStyle: {
     avoid: [],
@@ -27,8 +37,47 @@ const defaultCognitionCore = {
     meetLabel: "",
     personalityTexture: "",
   },
+  activeScene: null,
   lifeEvents: [],
   updatedAt: "",
+};
+const companionScenes = {
+  walk: {
+    title: "夜晚散步",
+    copy: "像并肩走一段路，不急着解决问题，只把今晚的风吹轻一点。",
+    opening: "那我们就当作一起出去走一小段。你不用马上讲重点，先告诉我：今晚这条路，是安静一点，还是有点乱？",
+    prompt: "我想和小暖一起夜晚散步，慢慢聊：",
+    eventTitle: "一起夜晚散步",
+    eventSummary: "用户和小暖选择了夜晚散步场景。小暖要用并肩、低压力、慢慢靠近的方式陪着。",
+    deltas: { trust: 2, comfort: 4, closeness: 2 },
+  },
+  cafe: {
+    title: "窗边咖啡",
+    copy: "像在窗边坐一会儿，适合轻松聊、慢慢认识彼此。",
+    opening: "好，我们坐窗边。饮料先不用真的点，我先替你留一个安静的位置。今天想从轻松一点的事聊起，还是从心里那块重的地方开始？",
+    prompt: "我想和小暖坐在窗边咖啡馆聊一会儿：",
+    eventTitle: "窗边坐了一会儿",
+    eventSummary: "用户和小暖进入窗边咖啡场景。小暖要更日常、更自然，不把所有话题都变沉重。",
+    deltas: { trust: 2, comfort: 3, closeness: 3 },
+  },
+  bedtime: {
+    title: "睡前十分钟",
+    copy: "把今天收个尾，不分析太多，只让心慢慢落地。",
+    opening: "那今晚我们只用十分钟收尾。你不用复盘完整一天，只说一个词也可以：现在最想放下的是什么？",
+    prompt: "我想让小暖陪我做睡前十分钟收尾：",
+    eventTitle: "睡前十分钟",
+    eventSummary: "用户和小暖做了一次睡前收尾。小暖要少分析、多安放，帮助用户把今天轻轻放下。",
+    deltas: { trust: 2, comfort: 5, closeness: 2 },
+  },
+  game: {
+    title: "默契小游戏",
+    copy: "用二选一、猜心情、猜偏好，轻轻长出一点熟悉感。",
+    opening: "我们玩一个很轻的默契小游戏。我先来：如果今晚只能选一个，你更想要“被安静陪着”，还是“有人主动逗你一下”？",
+    prompt: "我想和小暖玩一个默契小游戏：",
+    eventTitle: "一次默契小游戏",
+    eventSummary: "用户和小暖开始一次默契小游戏。小暖可以通过轻选择了解偏好，但不能把未经授权的选择写成长期记忆。",
+    deltas: { trust: 2, comfort: 2, closeness: 4 },
+  },
 };
 const companionTextures = [
   "安静、耐心，习惯先陪对方把话说完",
@@ -106,6 +155,7 @@ const initialCognitionCore = {
     ...(storedCognitionCore?.self || {}),
   },
   principles: storedCognitionCore?.principles || defaultCognitionCore.principles,
+  emotionalIntelligence: storedCognitionCore?.emotionalIntelligence || defaultCognitionCore.emotionalIntelligence,
   learnedStyle: {
     ...defaultCognitionCore.learnedStyle,
     ...(storedCognitionCore?.learnedStyle || {}),
@@ -118,6 +168,7 @@ const initialCognitionCore = {
     ...defaultCognitionCore.relationshipProfile,
     ...(storedCognitionCore?.relationshipProfile || {}),
   },
+  activeScene: storedCognitionCore?.activeScene || null,
   lifeEvents: storedCognitionCore?.lifeEvents || [],
 };
 
@@ -263,6 +314,10 @@ const socialStageEl = document.querySelector("#social-stage");
 const socialCopyEl = document.querySelector("#social-copy");
 const socialModeToggleEl = document.querySelector("#social-mode-toggle");
 const relationshipActionButtons = document.querySelectorAll("[data-relationship-action]");
+const sceneCardEl = document.querySelector("#scene-card");
+const sceneTitleEl = document.querySelector("#scene-title");
+const sceneCopyEl = document.querySelector("#scene-copy");
+const sceneButtons = document.querySelectorAll("[data-scene-id]");
 const socialFeedbackEl = document.querySelector("#social-feedback");
 const trustMeterEl = document.querySelector("#trust-meter");
 const comfortMeterEl = document.querySelector("#comfort-meter");
@@ -694,6 +749,12 @@ function getCompanionPrinciples() {
   return [...new Set([...(defaultCognitionCore.principles || []), ...(state.cognitionCore.principles || [])])].slice(0, 10);
 }
 
+function getEmotionalIntelligenceRules() {
+  return [
+    ...new Set([...(defaultCognitionCore.emotionalIntelligence || []), ...(state.cognitionCore.emotionalIntelligence || [])]),
+  ].slice(0, 10);
+}
+
 function reflectCompanionAfterExchange(userText, replyText = "") {
   if (!state.session || !userText) return;
   const clean = userText.trim();
@@ -760,7 +821,9 @@ function summarizeCognitionCore() {
   return {
     self: state.cognitionCore.self,
     principles: getCompanionPrinciples(),
+    emotionalIntelligence: getEmotionalIntelligenceRules(),
     companionMode: state.companionMode,
+    activeScene: state.cognitionCore.activeScene,
     relationshipLearning: getRelationshipLearning(),
     avoid,
     prefer,
@@ -1389,6 +1452,7 @@ function getRelationshipMoments() {
   const allowedTypes = new Set([
     "first_meet",
     "companion_mode",
+    "shared_scene",
     "shared_ritual",
     "relationship_feedback",
     "user_allowed_memory",
@@ -1894,6 +1958,56 @@ function growRelationshipFromAction({ trust = 0, comfort = 0, closeness = 0, fee
   saveCognitionCore();
 }
 
+function renderSceneCard() {
+  if (!sceneCardEl) return;
+  const visible = isRelationshipCompanionActive();
+  sceneCardEl.classList.toggle("hidden", !visible);
+  if (!visible) return;
+  const scene = state.cognitionCore.activeScene?.id ? companionScenes[state.cognitionCore.activeScene.id] : null;
+  sceneTitleEl.textContent = scene ? scene.title : "今晚在客厅";
+  sceneCopyEl.textContent = scene ? scene.copy : "选择一个小场景，让你们有一段共同经历。";
+  sceneButtons.forEach((button) => {
+    const active = button.dataset.sceneId === state.cognitionCore.activeScene?.id;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function startCompanionScene(sceneId) {
+  if (!state.session) {
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "登录后，小暖和你的共同场景才会留到下次。";
+    return;
+  }
+  const scene = companionScenes[sceneId];
+  if (!scene) return;
+  state.cognitionCore.activeScene = {
+    id: sceneId,
+    title: scene.title,
+    copy: scene.copy,
+    startedAt: new Date().toISOString(),
+  };
+  growRelationshipFromAction({
+    trust: scene.deltas.trust,
+    comfort: scene.deltas.comfort,
+    closeness: scene.deltas.closeness,
+    feedback: `你们进入了「${scene.title}」。关系会在这些共同经历里慢慢变得具体。`,
+    event: {
+      type: "shared_scene",
+      title: scene.eventTitle,
+      summary: scene.eventSummary,
+      source: "companion_scene",
+    },
+  });
+  addUniqueLearning("prefer", `在「${scene.title}」场景里，小暖要使用这种方式：${scene.copy}`);
+  addMessage("friend", scene.opening, "soft-nudge");
+  inputEl.value = scene.prompt;
+  inputEl.focus();
+  inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+  handleInputActivity();
+  renderSceneCard();
+}
+
 function startRelationshipAction(action) {
   if (!state.session) {
     authPanelEl.classList.remove("hidden");
@@ -1940,6 +2054,7 @@ function renderRelationshipNote() {
     renderGrowthCard();
     renderSocialPractice();
     renderMemoryPermissionSettings();
+    renderSceneCard();
     return;
   }
   const copy = {
@@ -1952,6 +2067,7 @@ function renderRelationshipNote() {
   renderGrowthCard();
   renderSocialPractice();
   renderMemoryPermissionSettings();
+  renderSceneCard();
 }
 
 async function initSupabase() {
@@ -2119,6 +2235,7 @@ async function loadCloudState() {
         ...(companionCore.core.self || {}),
       },
       principles: companionCore.core.principles || defaultCognitionCore.principles,
+      emotionalIntelligence: companionCore.core.emotionalIntelligence || defaultCognitionCore.emotionalIntelligence,
       learnedStyle: {
         ...defaultCognitionCore.learnedStyle,
         ...(companionCore.core.learnedStyle || {}),
@@ -2131,6 +2248,7 @@ async function loadCloudState() {
         ...defaultCognitionCore.relationshipProfile,
         ...(companionCore.core.relationshipProfile || {}),
       },
+      activeScene: companionCore.core.activeScene || null,
       lifeEvents: companionCore.core.lifeEvents || [],
     };
     state.nudgeStats = companionCore.nudge_stats || {};
@@ -2960,6 +3078,12 @@ socialModeToggleEl.addEventListener("click", () => {
 relationshipActionButtons.forEach((button) => {
   button.addEventListener("click", () => {
     startRelationshipAction(button.dataset.relationshipAction);
+  });
+});
+
+sceneButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    startCompanionScene(button.dataset.sceneId);
   });
 });
 

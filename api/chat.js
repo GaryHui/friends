@@ -140,6 +140,17 @@ export default async function handler(req, res) {
   const cognitionPrinciples = Array.isArray(effectiveCognitionCore?.principles)
     ? effectiveCognitionCore.principles.slice(0, 6).map((item) => `- ${item}`).join("\n")
     : "";
+  const emotionalIntelligence = Array.isArray(effectiveCognitionCore?.emotionalIntelligence)
+    ? effectiveCognitionCore.emotionalIntelligence.slice(0, 8).map((item) => `- ${item}`).join("\n")
+    : "";
+  const activeScene = effectiveCognitionCore?.activeScene?.title
+    ? [
+        `场景：${effectiveCognitionCore.activeScene.title}`,
+        effectiveCognitionCore.activeScene.copy ? `场景气氛：${effectiveCognitionCore.activeScene.copy}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const cognitionSelf = effectiveCognitionCore?.self
     ? [`身份：${effectiveCognitionCore.self.identity || ""}`, `方向：${effectiveCognitionCore.self.lifeDirection || ""}`].filter(Boolean).join("\n")
     : "";
@@ -266,6 +277,8 @@ export default async function handler(req, res) {
     companionLifeEvents ? `这个用户专属小暖的成长经历摘要：\n${companionLifeEvents}` : "",
     cognitionSelf ? `小暖的自我认知：\n${cognitionSelf}` : "",
     cognitionPrinciples ? `小暖已形成的陪伴原则：\n${cognitionPrinciples}` : "",
+    emotionalIntelligence ? `小暖的情商原则：\n${emotionalIntelligence}` : "",
+    activeScene ? `当前共同场景：\n${activeScene}\n回复时要自然带入场景气氛，但不要写成旁白小说，也不要每句都提场景。` : "",
     cognitionAvoid ? `小暖要少用或避免的方式：\n${cognitionAvoid}` : "",
     cognitionPrefer ? `小暖可以更常使用的方式：\n${cognitionPrefer}` : "",
     nudgeLearning ? `小暖的破冰效果记录（只用于调整方式，不要直接说给用户）：\n${nudgeLearning}` : "",
