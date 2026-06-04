@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>暖友 | 有人听你说话</title>
+    <meta
+      name="description"
+      content="暖友是一个温暖的 AI 生活朋友，陪你倾诉、复盘、放松，并在需要时提醒你联系真实的人。"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body>
+    <div class="app-shell intro-mode" id="app-shell">
+      <aside class="sidebar" aria-label="应用导航">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">暖</span>
+          <div>
+            <p class="eyebrow">NuanYou</p>
+            <h1>暖友</h1>
+          </div>
+        </div>
+
+        <section class="friend-panel" aria-labelledby="friend-title">
+          <img src="assets/companion.png" alt="坐在温暖房间里的虚拟朋友" />
+          <div>
+            <p class="eyebrow">今晚陪你的人</p>
+            <h2 id="friend-title">小暖</h2>
+            <p>你不用表现得很好，也不用一次说清楚。慢慢来，我会先听你说。</p>
+          </div>
+        </section>
+
+        <nav class="nav-tabs" aria-label="主要区域">
+          <button class="nav-tab active" data-view="chat" type="button">
+            <span aria-hidden="true">☁</span>
+            倾诉
+          </button>
+          <button class="nav-tab" data-view="mood" type="button">
+            <span aria-hidden="true">○</span>
+            复盘
+          </button>
+          <button class="nav-tab" data-view="comfort" type="button">
+            <span aria-hidden="true">✦</span>
+            放松
+          </button>
+          <button class="nav-tab" data-view="records" type="button">
+            <span aria-hidden="true">□</span>
+            记录
+          </button>
+          <button class="nav-tab" data-view="safety" type="button">
+            <span aria-hidden="true">!</span>
+            支持
+          </button>
+        </nav>
+
+        <section class="quiet-note" aria-label="温柔提示">
+          <p>这里不是医院，也不是审判席。它更像一盏小灯，陪你把今晚过完。</p>
+          <button class="text-button" id="reset-profile" type="button">重新认识小暖</button>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="topbar" aria-label="状态摘要">
+          <div>
+            <p class="eyebrow" id="top-eyebrow">第一次见面</p>
+            <h2 id="page-title">先认识一下，好吗？</h2>
+          </div>
+          <div class="top-actions">
+            <button class="tiny-member" data-view="plans" type="button">会员</button>
+            <button class="tiny-member" id="auth-toggle" type="button">登录</button>
+          </div>
+        </section>
+
+        <section class="auth-panel hidden" id="auth-panel" aria-label="登录">
+          <div>
+            <p class="eyebrow">让小暖下次认出你</p>
+            <p>登录后，小暖会把你允许保留的记录同步到你的账号里。你仍然可以随时删除。</p>
+          </div>
+          <form id="auth-form">
+            <input id="auth-email" type="email" placeholder="输入邮箱，接收登录链接" required />
+            <button class="primary-button" type="submit">发送登录链接</button>
+          </form>
+          <p class="auth-status" id="auth-status"></p>
+        </section>
+
+        <section class="view active intro-view" id="intro-view" aria-labelledby="intro-heading">
+          <div class="intro-card">
+            <div class="intro-copy">
+              <p class="eyebrow">小暖的自我介绍</p>
+              <h3 id="intro-heading">你好，我是小暖。以后你难过的时候，可以先来这里坐一会儿。</h3>
+              <p>
+                我不会催你马上开心，也不会评价你脆弱。我们可以先从很简单的认识开始：
+                我知道怎么称呼你，也知道你希望我用哪种方式靠近你。
+              </p>
+              <div class="trust-note">
+                <strong>你一直有控制权。</strong>
+                <span>你可以回看和小暖聊过什么，也可以删除任何一条聊天或记忆。小暖想长期记住某件事时，会先问你。</span>
+              </div>
+              <form class="intro-form" id="intro-form">
+                <label>
+                  我可以怎么称呼你？
+                  <input id="nickname-input" type="text" placeholder="例如：阿远、小林、或者先不说" />
+                </label>
+                <fieldset>
+                  <legend>今天你更希望我怎么陪你？</legend>
+                  <div class="intro-choices">
+                    <button class="intro-choice active" data-tone="gentle" type="button">
+                      <strong>先听我说</strong>
+                      <span>不用分析，先接住我</span>
+                    </button>
+                    <button class="intro-choice" data-tone="clear" type="button">
+                      <strong>帮我理清</strong>
+                      <span>把混乱慢慢拆开</span>
+                    </button>
+                    <button class="intro-choice" data-tone="hope" type="button">
+                      <strong>给我一点力气</strong>
+                      <span>陪我走到下一步</span>
+                    </button>
+                  </div>
+                </fieldset>
+                <button class="primary-button" type="submit">好，我们慢慢聊</button>
+              </form>
+            </div>
+            <div class="intro-portrait" aria-hidden="true">
+              <img src="assets/companion.png" alt="" />
+              <div>
+                <span>小暖</span>
+                <p>刚认识也没关系，我们可以慢慢熟起来。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="chat-view" aria-labelledby="chat-heading">
+          <div class="home-layout">
+            <section class="chat-room" aria-labelledby="chat-heading">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">客厅</p>
+                  <h3 id="chat-heading">先把心里的话放下来</h3>
+                </div>
+                <button class="ghost-button" id="clear-chat" type="button">清空</button>
+              </div>
+
+              <div class="messages" id="messages" aria-live="polite"></div>
+
+              <div class="memory-request hidden" id="memory-request" aria-live="polite">
+                <div>
+                  <p class="eyebrow">小暖想确认一下</p>
+                  <p id="memory-text">这件事要不要让我以后记得？</p>
+                </div>
+                <div class="memory-actions">
+                  <button class="primary-button" id="remember-yes" type="button">记住</button>
+                  <button class="ghost-button" id="remember-session" type="button">只这次用</button>
+                  <button class="ghost-button" id="remember-no" type="button">不要记</button>
+                </div>
+              </div>
+
+              <div class="soft-prompts" aria-label="快速开始">
+                <button type="button" data-prompt="我今天最难受的一刻是：">最难受的一刻</button>
+                <button type="button" data-prompt="我想把今天发生的事慢慢复盘一下：">复盘今天</button>
+                <button type="button" data-prompt="请陪我做一个今晚能完成的小计划：">今晚小计划</button>
+              </div>
+
+              <form class="composer" id="chat-form">
+                <textarea
+                  id="message-input"
+                  placeholder="从一句很乱的话开始也可以..."
+                  rows="3"
+                  aria-label="输入想倾诉的内容"
+                ></textarea>
+                <button class="primary-button" type="submit">发送</button>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="mood-view" aria-labelledby="mood-heading">
+          <div class="two-column">
+            <section class="panel">
+              <p class="eyebrow">睡前复盘</p>
+              <h3 id="mood-heading">给今天一个温柔的收尾</h3>
+              <form id="mood-form" class="mood-form">
+                <label>
+                  今天的重量
+                  <input id="mood-range" type="range" min="1" max="10" value="5" />
+                </label>
+                <div class="mood-value"><span id="mood-value">5</span>/10</div>
+                <label>
+                  主要感受
+                  <select id="mood-label">
+                    <option>孤独</option>
+                    <option>焦虑</option>
+                    <option>疲惫</option>
+                    <option>委屈</option>
+                    <option>麻木</option>
+                    <option>还算平静</option>
+                  </select>
+                </label>
+                <label>
+                  想留下的一句话
+                  <input id="mood-note" type="text" placeholder="例如：今天很难，但我还是撑过来了" />
+                </label>
+                <button class="primary-button" type="submit">记下来</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">最近几天</p>
+                  <h3>你走过的路</h3>
+                </div>
+                <button class="ghost-button" id="clear-moods" type="button">清空</button>
+              </div>
+              <div class="mood-list" id="mood-list"></div>
+            </section>
+          </div>
+
+          <section class="panel insight-panel" aria-labelledby="insight-heading">
+            <p class="eyebrow">慢慢看见自己</p>
+            <h3 id="insight-heading">复盘不是为了责怪自己，是为了少被同一个地方反复刺痛</h3>
+            <div class="insight-grid">
+              <article>
+                <strong>什么最伤你</strong>
+                <p>把触发点看清楚一点，下次就多一点准备。</p>
+              </article>
+              <article>
+                <strong>什么帮到你</strong>
+                <p>记录那些真的让你缓过来的话和动作。</p>
+              </article>
+              <article>
+                <strong>明天只要一小步</strong>
+                <p>不是改变整个人生，只是让明天轻一点。</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="comfort-view" aria-labelledby="comfort-heading">
+          <div class="two-column">
+            <section class="panel breathing-panel">
+              <p class="eyebrow">呼吸一下</p>
+              <h3 id="comfort-heading">先让身体知道：现在安全一点</h3>
+              <div class="breath-circle" id="breath-circle">吸气</div>
+              <p id="breath-copy">跟着圆圈节奏：吸气 4 秒，停留 2 秒，呼气 6 秒。</p>
+              <button class="primary-button" id="start-breath" type="button">开始</button>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">很小的照顾</p>
+              <h3>今晚只做一件也算数</h3>
+              <div class="step-grid" id="step-grid">
+                <button type="button">喝一杯水</button>
+                <button type="button">把灯调暖一点</button>
+                <button type="button">给信任的人发一句“我有点难受”</button>
+                <button type="button">洗脸或冲个热水澡</button>
+                <button type="button">把明天第一件事写小一点</button>
+                <button type="button">躺下前夸自己一句</button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="records-view" aria-labelledby="records-heading">
+          <section class="panel records-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">你的记录</p>
+                <h3 id="records-heading">你可以决定哪些留下，哪些删掉</h3>
+              </div>
+              <button class="ghost-button" id="clear-all-records" type="button">全部清空</button>
+            </div>
+            <div class="records-grid">
+              <section>
+                <p class="eyebrow">小暖记得的事</p>
+                <div class="record-list" id="memory-list"></div>
+              </section>
+              <section>
+                <p class="eyebrow">聊过的话</p>
+                <div class="record-list" id="chat-record-list"></div>
+              </section>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="plans-view" aria-labelledby="plans-heading">
+          <section class="panel membership-panel">
+            <p class="eyebrow">会员</p>
+            <h3 id="plans-heading">更多陪伴可以以后再说，今晚先不用急</h3>
+            <p>
+              暖友会先把基础倾诉和安全支持做好。会员只是给愿意长期使用的人准备的额外能力，比如记住你的偏好、语音陪伴、睡前总结和更多朋友形象。
+            </p>
+            <div class="membership-list">
+              <article>
+                <strong>长一点的记忆</strong>
+                <p>记住你喜欢怎样被安慰，哪些话不适合你。</p>
+              </article>
+              <article>
+                <strong>睡前陪伴</strong>
+                <p>把一天轻轻收尾，不把情绪带进夜里。</p>
+              </article>
+              <article>
+                <strong>自己的朋友形象</strong>
+                <p>声音、头像、性格，都可以更贴近你。</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="safety-view" aria-labelledby="safety-heading">
+          <div class="safety-hero">
+            <div>
+              <p class="eyebrow">先保护你</p>
+              <h3 id="safety-heading">如果现在很危险，先让真人靠近你</h3>
+              <p>
+                如果你已经有伤害自己的计划、工具，或觉得自己可能撑不过今晚，请立刻联系当地急救电话、身边可信任的人，或前往最近的急诊。
+              </p>
+            </div>
+          </div>
+          <div class="support-grid">
+            <article class="support-card">
+              <h4>美国</h4>
+              <p>拨打或短信 <strong>988</strong>，联系 Suicide & Crisis Lifeline。</p>
+            </article>
+            <article class="support-card">
+              <h4>中国大陆</h4>
+              <p>紧急危险请拨打 <strong>110</strong> 或 <strong>120</strong>，并尽快联系身边可信任的人。</p>
+            </article>
+            <article class="support-card">
+              <h4>任何地区</h4>
+              <p>把自己移到有人、有光、远离危险物品的地方，然后告诉一个真人：“我现在不安全，需要你陪我。”</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

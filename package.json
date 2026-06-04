@@ -1,0 +1,16 @@
+{
+  "name": "nuanyou-friends",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "vercel dev",
+    "check": "node --check app.js && node --check api/chat.js && node --check api/config.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.75.0"
+  },
+  "devDependencies": {
+    "vercel": "^48.10.3"
+  }
+}
