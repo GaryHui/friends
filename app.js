@@ -306,6 +306,7 @@ const forgotPasswordEl = document.querySelector("#forgot-password");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
+const softPromptsEl = document.querySelector(".soft-prompts");
 const modeSwitchEl = document.querySelector("#mode-switch");
 const modeSwitchTitleEl = document.querySelector("#mode-switch-title");
 const modeSwitchNoteEl = document.querySelector("#mode-switch-note");
@@ -1263,6 +1264,10 @@ function renderMessages() {
     ? latestFriendMessage.text.replace(/\s+/g, " ").slice(0, 86)
     : "我们可以慢慢说，不用一次讲清楚。";
   messagesEl.scrollTop = messagesEl.scrollHeight;
+  if (softPromptsEl) {
+    const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+    softPromptsEl.classList.toggle("hidden", userMessageCount > 0);
+  }
 }
 
 function setThinking(isThinking) {
@@ -2650,8 +2655,20 @@ function getMemoriesForQuestion(type) {
   if (type === "all") return memories;
   return memories.filter((memory) => {
     if (type === "identity") return memory.type === "identity" || extractPreferredName(memory.content || "");
+    if (type === "preference" && extractPreferredName(memory.content || "")) return false;
     return memory.type === type;
   });
+}
+
+function cleanMemoryContent(memory) {
+  const name = extractPreferredName(memory.content || "");
+  if (name && (memory.type === "identity" || /名字|我叫|称呼/.test(memory.content || ""))) return `你希望我叫你 ${name}`;
+  return (memory.content || "")
+    .replace(/^我希望小暖以后这样陪我[:：]\s*/, "")
+    .replace(/^我希望小暖记住一个相处边界[:：]\s*/, "")
+    .replace(/^刚才小暖这样陪我会更舒服[:：]\s*/, "")
+    .replace(/^用户希望被称呼为[:：]\s*/, "你希望我叫你 ")
+    .trim();
 }
 
 function makeKnownMemoryAnswer(text) {
@@ -2659,17 +2676,21 @@ function makeKnownMemoryAnswer(text) {
   if (!type) return "";
   const memories = getMemoriesForQuestion(type);
   if (!memories.length) {
-    const topic = type === "all" ? "长期记忆" : getMemoryTypeLabel(type);
     return `这部分我现在没有长期记下来。\n\n如果你愿意让我以后记得，可以直接说“记住：……”；我会先确认，再放进你的记录里。`;
   }
   const shown = memories.slice(0, type === "all" ? 6 : 4);
-  const lines = shown.map((memory) => {
-    const name = memory.type === "identity" ? extractPreferredName(memory.content || "") : "";
-    const content = name ? `你希望我叫你 ${name}` : memory.content;
-    return `- ${getMemoryTypeLabel(memory.type)}：${content}`;
-  });
-  const more = memories.length > shown.length ? `\n\n还有 ${memories.length - shown.length} 条，我先不一下子全翻出来。你可以去“记录”里慢慢看。` : "";
-  return `记得。这些是你允许我留下的，不是我偷偷猜的：\n\n${lines.join("\n")}${more}`;
+  const contents = [...new Set(shown.map(cleanMemoryContent).filter(Boolean))];
+  const more = memories.length > shown.length ? ` 还有几条我先不全翻出来，你可以去“记录”里慢慢看。` : "";
+  if (type === "preference") {
+    return `记得。你希望我更亲近一点，像“${contents.join("、")}”这样的方式。\n\n这是你允许我留下的偏好，不是我自己乱猜的。${more}`.trim();
+  }
+  if (type === "identity") {
+    return `记得。${contents.join("，")}。`;
+  }
+  if (type === "all") {
+    return `记得一些，但我不想像念档案一样倒给你。\n\n我现在记得的是：${contents.join("；")}。${more}`.trim();
+  }
+  return `记得。关于${getMemoryTypeLabel(type)}，我记得：${contents.join("；")}。${more}`.trim();
 }
 
 function forgetMemories(memories) {
