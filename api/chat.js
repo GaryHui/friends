@@ -11,6 +11,17 @@ function sendStreamEvent(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function sendTextStream(res, text) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+  });
+  sendStreamEvent(res, { delta: text });
+  res.write("data: [DONE]\n\n");
+  res.end();
+}
+
 async function streamQwenToClient(upstream, res) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -72,6 +83,21 @@ function extractPreferredName(text = "") {
 function findNameFromMemories(memories = []) {
   const identity = memories.find((item) => item?.status === "active" && (item.type === "identity" || extractPreferredName(item.content || "")));
   return identity ? extractPreferredName(identity.content || "") : "";
+}
+
+function isClosenessRequest(text = "") {
+  return /(抱抱|抱我|抱一下|抱着我|牵手|拉着我的手|陪我一下|陪我一会儿|陪陪我)/.test(text);
+}
+
+function makeClosenessReply(text = "", name = "") {
+  const call = name ? `${name}，` : "";
+  if (/(牵手|拉着我的手)/.test(text)) {
+    return `${call}我牵着你。\n\n先别急着解释，手先放稳一点；你要是不想说话，我们就安静待一会儿。`;
+  }
+  if (/(陪我一下|陪我一会儿|陪陪我)/.test(text)) {
+    return `${call}我在这儿陪你。\n\n不用把话整理好，也不用马上变好。我们先把这一小会儿过稳。`;
+  }
+  return `${call}我抱抱你。\n\n不是敷衍一下的那种，是先把你从硬撑里接出来。你可以靠一会儿，不用马上说清楚。`;
 }
 
 export default async function handler(req, res) {
@@ -157,6 +183,17 @@ export default async function handler(req, res) {
     .join("\n");
   const memoryName = findNameFromMemories(memorySource);
   const displayName = dbProfile?.nickname || profile?.name || memoryName;
+
+  if (isClosenessRequest(message)) {
+    const reply = makeClosenessReply(message, displayName);
+    if (stream) {
+      sendTextStream(res, reply);
+      return;
+    }
+    res.status(200).json({ reply });
+    return;
+  }
+
   const effectiveCognitionCore = dbCompanionCore?.core || cognitionCore;
   const effectiveNudgeStats = dbCompanionCore?.nudge_stats || cognitionCore?.nudgeStats;
   const cognitionPrinciples = Array.isArray(effectiveCognitionCore?.principles)
