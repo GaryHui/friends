@@ -85,13 +85,14 @@ export default async function handler(req, res) {
     .slice(-8);
   let dbProfile = null;
   let dbMemories = [];
+  let dbCompanionCore = null;
   const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
   if (token && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const supabase = createClient(normalizeSupabaseUrl(process.env.SUPABASE_URL), process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { data: userData } = await supabase.auth.getUser(token);
     const userId = userData?.user?.id;
     if (userId) {
-      const [{ data: storedProfile }, { data: storedMemories }] = await Promise.all([
+      const [{ data: storedProfile }, { data: storedMemories }, { data: storedCompanionCore }] = await Promise.all([
         supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
         supabase
           .from("memory_cards")
@@ -100,9 +101,11 @@ export default async function handler(req, res) {
           .eq("status", "active")
           .order("created_at", { ascending: false })
           .limit(20),
+        supabase.from("companion_cores").select("*").eq("user_id", userId).maybeSingle(),
       ]);
       dbProfile = storedProfile;
       dbMemories = storedMemories || [];
+      dbCompanionCore = storedCompanionCore;
     }
   }
 
@@ -113,14 +116,27 @@ export default async function handler(req, res) {
     .map((item) => `- ${item.content}`)
     .join("\n");
   const displayName = dbProfile?.nickname || profile?.name;
-  const cognitionPrinciples = Array.isArray(cognitionCore?.principles)
-    ? cognitionCore.principles.slice(0, 6).map((item) => `- ${item}`).join("\n")
+  const effectiveCognitionCore = dbCompanionCore?.core || cognitionCore;
+  const effectiveNudgeStats = dbCompanionCore?.nudge_stats || cognitionCore?.nudgeStats;
+  const cognitionPrinciples = Array.isArray(effectiveCognitionCore?.principles)
+    ? effectiveCognitionCore.principles.slice(0, 6).map((item) => `- ${item}`).join("\n")
     : "";
-  const cognitionSelf = cognitionCore?.self
-    ? [`身份：${cognitionCore.self.identity || ""}`, `方向：${cognitionCore.self.lifeDirection || ""}`].filter(Boolean).join("\n")
+  const cognitionSelf = effectiveCognitionCore?.self
+    ? [`身份：${effectiveCognitionCore.self.identity || ""}`, `方向：${effectiveCognitionCore.self.lifeDirection || ""}`].filter(Boolean).join("\n")
     : "";
-  const cognitionAvoid = typeof cognitionCore?.avoid === "string" ? cognitionCore.avoid.slice(0, 700) : "";
-  const cognitionPrefer = typeof cognitionCore?.prefer === "string" ? cognitionCore.prefer.slice(0, 700) : "";
+  const cognitionAvoid =
+    typeof effectiveCognitionCore?.avoid === "string"
+      ? effectiveCognitionCore.avoid.slice(0, 700)
+      : Array.isArray(effectiveCognitionCore?.learnedStyle?.avoid)
+        ? effectiveCognitionCore.learnedStyle.avoid.slice(0, 5).map((item) => `- ${item}`).join("\n")
+        : "";
+  const cognitionPrefer =
+    typeof effectiveCognitionCore?.prefer === "string"
+      ? effectiveCognitionCore.prefer.slice(0, 700)
+      : Array.isArray(effectiveCognitionCore?.learnedStyle?.prefer)
+        ? effectiveCognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n")
+        : "";
+  const nudgeLearning = effectiveNudgeStats ? JSON.stringify(effectiveNudgeStats).slice(0, 900) : "";
 
   const system = [
     "你叫小暖，是一个温暖、有边界、稳定可靠的 AI 生活朋友。",
@@ -138,6 +154,7 @@ export default async function handler(req, res) {
     cognitionPrinciples ? `小暖已形成的陪伴原则：\n${cognitionPrinciples}` : "",
     cognitionAvoid ? `小暖要少用或避免的方式：\n${cognitionAvoid}` : "",
     cognitionPrefer ? `小暖可以更常使用的方式：\n${cognitionPrefer}` : "",
+    nudgeLearning ? `小暖的破冰效果记录（只用于调整方式，不要直接说给用户）：\n${nudgeLearning}` : "",
     "说话风格：自然、口语、有停顿感，有温度和用心，像一个很好的倾诉对象在微信里认真回你；不要像心理咨询师、客服、课程助教或机器人。",
     "你不是问答机器人。每次回复都要像一个真实朋友在接话：先回应用户刚刚那句话里最有重量的地方，再自然延展一点点，让对话继续有路可走。",
     "回复方法：先接住用户的情绪，再回应事情本身；可以轻轻说'我在'、'这句话我会认真接住'、'你不用把自己解释得那么完整'，但不要夸张煽情。",

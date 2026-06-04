@@ -307,13 +307,19 @@ function getNudgeStats(signal) {
   return state.nudgeStats[signal];
 }
 
-function saveNudgeStats() {
+function saveNudgeStats(options = {}) {
   localStorage.setItem("nuanyou-nudge-stats", JSON.stringify(state.nudgeStats));
+  if (!options.localOnly) {
+    saveCognitionCoreRemote();
+  }
 }
 
-function saveCognitionCore() {
+function saveCognitionCore(options = {}) {
   state.cognitionCore.updatedAt = new Date().toISOString();
   localStorage.setItem("nuanyou-cognition-core", JSON.stringify(state.cognitionCore));
+  if (!options.localOnly) {
+    saveCognitionCoreRemote();
+  }
 }
 
 function addUniqueLearning(bucket, value) {
@@ -1006,13 +1012,15 @@ function clearStoredPrivateCache() {
   localStorage.removeItem("nuanyou-messages");
   localStorage.removeItem("nuanyou-moods");
   localStorage.removeItem("nuanyou-memory-login-notice");
+  localStorage.removeItem("nuanyou-cognition-core");
+  localStorage.removeItem("nuanyou-nudge-stats");
 }
 
 async function loadCloudState() {
   if (!state.supabase || !state.session) return;
 
   const userId = state.session.user.id;
-  const [{ data: profile }, { data: memories }] = await Promise.all([
+  const [{ data: profile }, { data: memories }, companionCoreResult] = await Promise.all([
     state.supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
     state.supabase
       .from("memory_cards")
@@ -1020,7 +1028,9 @@ async function loadCloudState() {
       .eq("user_id", userId)
       .eq("status", "active")
       .order("created_at", { ascending: false }),
+    state.supabase.from("companion_cores").select("*").eq("user_id", userId).maybeSingle(),
   ]);
+  const companionCore = companionCoreResult?.data;
 
   if (profile) {
     state.profile = {
@@ -1044,6 +1054,27 @@ async function loadCloudState() {
     }));
   }
 
+  if (companionCore?.core) {
+    state.cognitionCore = {
+      ...defaultCognitionCore,
+      ...companionCore.core,
+      self: {
+        ...defaultCognitionCore.self,
+        ...(companionCore.core.self || {}),
+      },
+      principles: companionCore.core.principles || defaultCognitionCore.principles,
+      learnedStyle: {
+        ...defaultCognitionCore.learnedStyle,
+        ...(companionCore.core.learnedStyle || {}),
+      },
+    };
+    state.nudgeStats = companionCore.nudge_stats || {};
+    saveCognitionCore({ localOnly: true });
+    saveNudgeStats({ localOnly: true });
+  } else {
+    await saveCognitionCoreRemote();
+  }
+
   persist();
   appShellEl.classList.toggle("intro-mode", !state.profile);
   renderMessages();
@@ -1064,7 +1095,18 @@ async function saveProfileRemote() {
 async function syncLocalStateRemote() {
   if (!state.supabase || !state.session) return;
   await saveProfileRemote();
+  await saveCognitionCoreRemote();
   await Promise.all(state.memories.filter((memory) => memory.status !== "deleted").map((memory) => syncMemory(memory)));
+}
+
+async function saveCognitionCoreRemote() {
+  if (!state.supabase || !state.session) return;
+  await state.supabase.from("companion_cores").upsert({
+    user_id: state.session.user.id,
+    core: state.cognitionCore,
+    nudge_stats: state.nudgeStats,
+    updated_at: new Date().toISOString(),
+  }).then(() => null);
 }
 
 async function syncMemory(memory) {

@@ -99,6 +99,11 @@ memory_cards
 - content
 - status
 - sensitivity
+
+companion_cores
+- user_id
+- core
+- nudge_stats
 ```
 
 不推荐默认保存：
@@ -117,6 +122,61 @@ memory_cards
 我们会尽量把记忆压缩成偏好、边界和陪伴方式，而不是保存原始倾诉内容。
 当前对话会发送给 AI 服务用于生成回复，但不会默认进入长期记忆。
 你可以随时删除记忆，也可以直接对小暖说“忘掉这件事”。
+```
+
+### 小暖认知核心表
+
+`companion_cores` 保存的是“小暖自己的成长记录”，不是用户的具体隐私事实。它适合保存：
+
+```text
+小暖的陪伴原则
+小暖自己的说话偏好
+哪些破冰方式有效或无效
+用户反馈过的相处方式偏好，例如少分析、少追问、先陪着
+```
+
+它不应该保存：
+
+```text
+用户没有授权的小秘密
+完整聊天原文
+具体人名、住址、身份信息
+没有必要长期保存的情绪细节
+```
+
+建表 SQL：
+
+```sql
+create table if not exists companion_cores (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  core jsonb not null default '{}'::jsonb,
+  nudge_stats jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table companion_cores enable row level security;
+
+drop policy if exists "companion_cores_select_own" on companion_cores;
+create policy "companion_cores_select_own"
+on companion_cores for select
+using (auth.uid() = user_id);
+
+drop policy if exists "companion_cores_insert_own" on companion_cores;
+create policy "companion_cores_insert_own"
+on companion_cores for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "companion_cores_update_own" on companion_cores;
+create policy "companion_cores_update_own"
+on companion_cores for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "companion_cores_delete_own" on companion_cores;
+create policy "companion_cores_delete_own"
+on companion_cores for delete
+using (auth.uid() = user_id);
 ```
 
 ## 小暖的人设边界
