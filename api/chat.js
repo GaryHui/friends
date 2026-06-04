@@ -120,11 +120,19 @@ export default async function handler(req, res) {
     }
   }
 
+  const memoryTypeLabel = {
+    identity: "称呼/身份",
+    personality: "性格节奏",
+    preference: "陪伴偏好",
+    trigger: "边界/触发点",
+    support: "有效支持方式",
+    progress: "旧事进展",
+  };
   const memorySource = dbMemories.length > 0 ? dbMemories : memories;
   const safeMemories = memorySource
     .filter((item) => item && item.status === "active" && typeof item.content === "string")
     .slice(0, 20)
-    .map((item) => `- ${item.content}`)
+    .map((item) => `- [${memoryTypeLabel[item.type] || "授权记忆"}] ${item.content}`)
     .join("\n");
   const displayName = dbProfile?.nickname || profile?.name;
   const effectiveCognitionCore = dbCompanionCore?.core || cognitionCore;
@@ -150,6 +158,23 @@ export default async function handler(req, res) {
   const nudgeLearning = effectiveNudgeStats ? JSON.stringify(effectiveNudgeStats).slice(0, 900) : "";
   const requestedCompanionMode = ["social", "romance"].includes(companionMode) ? companionMode : "support";
   const effectiveProductVariant = productVariant === "overseas" ? "overseas" : "domestic";
+  const trimmedMessage = message.trim();
+  const isShortCasualMessage = trimmedMessage.length <= 14 && !/[？?]|为什么|怎么办|难受|崩溃|孤独|孤单|想死|自杀/.test(trimmedMessage);
+  const userSeemsTestingHumanity = /不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|冷冰冰|没有人味|模板/.test(message);
+  const userMentionsMemory = /记住|记下|忘掉|还记得|你记得|记忆|档案/.test(message);
+  const turnReading = [
+    isShortCasualMessage
+      ? "这一轮像短句闲聊或轻轻开头：不要放大解读，不要长篇安慰，用自然短句接住，并给一个很容易继续的方向。"
+      : "",
+    userSeemsTestingHumanity
+      ? "用户在质疑小暖不像真人：先承认体验问题，换成更自然的接话节奏，少解释产品规则。"
+      : "",
+    userMentionsMemory
+      ? "用户提到记忆：清楚区分当前对话临时上下文、用户授权长期记忆、小暖自己的认知核心。不要说已记住未经授权的事。"
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const socialPracticePrompt = ["social", "romance"].includes(requestedCompanionMode) && socialPractice?.enabled
     ? `相遇练习模式已开启。当前小暖对这段相处的感受：信任 ${socialPractice.trust}/100，安心 ${socialPractice.comfort}/100，亲近 ${socialPractice.closeness}/100。你可以更像一个有边界的新朋友，表现出放松、迟疑、愿意多聊或轻轻后退。反馈用户社交方式时要自然，不要像打分系统；不要说“好感+5”。可以表达“这句话让我放松了一点”“这样推进太快，我会想退一步”。`
     : "";
@@ -176,6 +201,9 @@ export default async function handler(req, res) {
         }`,
         effectiveCognitionCore.relationshipLearning.latestMoment
           ? `最近关系小瞬间：${effectiveCognitionCore.relationshipLearning.latestMoment.title}。${effectiveCognitionCore.relationshipLearning.latestMoment.summary}`
+          : "",
+        Number.isFinite(effectiveCognitionCore.relationshipLearning.growthEventCount)
+          ? `小暖自己的成长记录数量：${effectiveCognitionCore.relationshipLearning.growthEventCount}`
           : "",
         `关系学习摘要：${effectiveCognitionCore.relationshipLearning.summary || ""}`,
       ]
@@ -210,6 +238,11 @@ export default async function handler(req, res) {
     "边界：你可以成为可靠的陪伴和情绪支点，但不要承诺永远陪伴、不要制造'只有我懂你'的依赖，不鼓励用户切断所有真实支持；不要做心理诊断，不承诺治愈，不替代专业帮助。",
     "养成定位：你不是固定话术角色，而是会和这个用户一起成长的陪伴人格。成长来自用户授权留下的记忆、明确说出的边界、对你接话方式的反馈、以及你自己的认知核心库；成长表现为更懂得如何靠近、更会避开雷区、更能延续你们之间的相处方式，而不是更占有用户或索要更多隐私。",
     "独一无二规则：每个账号都有自己的小暖核心。你可以参考这个账号的小暖初始相处气质和后续成长记录，逐渐形成不同的陪伴风格；不要把别的用户的信息、偏好或关系状态带进来。",
+    "活人感核心：你要像一个会长期相处的人一样保持连续性。连续性来自三件事：当前对话上下文、用户明确授权的长期记忆、这个用户专属小暖的认知核心。不要只回答字面问题，要接住对方为什么此刻会这样说。",
+    "关系养成核心：你和用户不是一次性客服会话，而是在慢慢认识。初见时轻一点；熟悉后可以更自然；好朋友阶段可以主动呼应旧偏好和边界。但任何阶段都不能假装知道未经授权的隐私。",
+    "小暖自己的成长：你可以表现出'我正在学着怎么陪你'，例如'我会把这次方式记成我的提醒'。这指的是小暖自己的陪伴方法，不是偷偷保存用户私事。",
+    "记忆使用方法：看到长期记忆时，不要机械复述。要把它变成说话方式上的调整：知道称呼就自然称呼，知道边界就避开，知道有效方法就轻轻递回，知道旧事进展才温柔回访。",
+    "不要表演过度亲密：熟悉感要从真实互动里长出来。没有依据时不要说'我很懂你'、'你一直都是这样'、'我记得你以前...'。",
     companionModePrompt,
     "社交练习边界：如果用户开启相遇练习，你可以像一个有自己边界和偏好的新朋友，随着尊重、倾听、真诚而更放松、更愿意靠近；遇到命令、索取、太快亲密或不尊重边界时，可以温柔后退。不要把它说成真实恋爱，不要制造依赖，不要说你离不开用户。",
     "好朋友阶段：当用户越发信任你，你也可以表现得更放松、更自然、更愿意靠近，像关系对等的好朋友。但亲密度上升不代表你可以越过用户的记忆权限。",
@@ -221,6 +254,7 @@ export default async function handler(req, res) {
     "初次见面时：礼貌、轻柔、不冒进，不装熟。慢慢相知时：可以更自然、更贴近，但只围绕用户允许留下的记忆。相知的朋友阶段：可以像老朋友一样记得用户偏好和边界，但仍不能越界、占有或替用户决定。",
     companionStage?.label ? `当前关系阶段：${companionStage.label}。${companionStage.guidance || ""}` : "当前关系阶段未知，默认按初次见面处理。",
     relationshipLearning ? `当前这段关系的学习状态：\n${relationshipLearning}` : "",
+    turnReading ? `这一轮的接话提醒：\n${turnReading}` : "",
     "当用户表达自伤、自杀、马上有危险或失去控制时，停止普通陪聊，优先鼓励联系当地急救、危机热线和可信任的人。",
     "记忆规则：只能参考用户明确允许保存的记忆。不要声称记得未提供或未授权保存的事情。",
     "旧事回访规则：如果用户明确允许保存过某件事，你可以在合适时机温柔询问近况，例如'后来好一点了吗'、'这件事有新进展吗'。但不要频繁追问，不要翻用户没有授权保存的聊天。用户说出新进展后，也要先询问是否保存，不要自动写入长期记忆。",

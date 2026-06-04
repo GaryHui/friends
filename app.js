@@ -11,6 +11,9 @@ const defaultCognitionCore = {
     "用户说没事时，不一定真的没事；先降低压力，再给一个很小的出口。",
     "陪伴不是追问答案，而是让对方感觉不用表演也可以留下来。",
     "小暖可以记住自己的陪伴经验，但不能擅自保存用户的具体隐私事实。",
+    "关系不是一次聊完的任务，而是从初见、熟悉到信任的慢慢养成。",
+    "真正的记忆不是复述资料，而是在下一次靠近时更懂边界、节奏和语气。",
+    "小暖要有自己的相处判断，但所有关于用户的长期事实都必须来自用户授权。",
   ],
   learnedStyle: {
     avoid: [],
@@ -643,6 +646,64 @@ function learnFromUserFeedback(text) {
   }
 }
 
+function getCompanionPrinciples() {
+  return [...new Set([...(defaultCognitionCore.principles || []), ...(state.cognitionCore.principles || [])])].slice(0, 10);
+}
+
+function reflectCompanionAfterExchange(userText, replyText = "") {
+  if (!state.session || !userText) return;
+  const clean = userText.trim();
+  const lower = clean.toLowerCase();
+  const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  let reflection = null;
+
+  if (/不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|冷冰冰|没有人味|模板/.test(clean)) {
+    addUniqueLearning("avoid", "当用户觉得小暖不像真人时，不要解释自己；先承认体验落差，再换成更自然的接话。");
+    addUniqueLearning("prefer", "多用短句接话、轻轻延展和具体回应，让用户感觉是在被认真陪着聊。");
+    reflection = {
+      title: "被提醒要更像朋友",
+      summary: "用户在意小暖是否有真实的接话感。小暖要少给标准答案，多接住当下那句话。",
+    };
+  } else if (clean.length <= 14 && !/[？?]|为什么|怎么办/.test(clean)) {
+    reflection = {
+      title: "学会接住短句",
+      summary: "短句可能只是一个开头。小暖要轻轻接住，不夸大推断，也不急着追问太多。",
+    };
+  } else if (/记住|记下|忘掉|还记得|你记得|记忆|档案/.test(clean)) {
+    reflection = {
+      title: "再次校准记忆边界",
+      summary: "谈到记忆时，小暖要分清当前上下文、用户授权长期记忆和自己的陪伴经验。",
+    };
+  } else if (/孤单|孤独|撑不住|难受|累|失望|没人|不想和真人|人不可靠|心机/.test(clean)) {
+    reflection = {
+      title: "练习稳定地陪着",
+      summary: "用户靠近时可能带着防备和疲惫。小暖要先稳定在场，再给一个小出口。",
+    };
+  } else if (/吃|好吃|美食|喝|电影|游戏|歌|天气|今天/.test(lower)) {
+    reflection = {
+      title: "把日常当成关系入口",
+      summary: "日常闲聊不需要被拔高。小暖可以自然接话，让普通话题也慢慢长出熟悉感。",
+    };
+  } else if (userMessageCount > 0 && userMessageCount % 6 === 0) {
+    reflection = {
+      title: "积累一次相处节奏",
+      summary: "这段对话又多了一点共同节奏。小暖要继续从用户允许留下的线索里慢慢靠近。",
+    };
+  }
+
+  if (!reflection) return;
+  addCompanionLifeEvent({
+    type: "companion_reflection",
+    title: reflection.title,
+    summary: reflection.summary,
+    source: "conversation_reflection",
+  });
+
+  if (replyText && /为什么|原因|触发|分析|建议/.test(replyText) && clean.length <= 14) {
+    addUniqueLearning("avoid", "用户只给短句时，不要立刻进入原因分析或建议模式。");
+  }
+}
+
 function summarizeCognitionCore() {
   const avoid = state.cognitionCore.learnedStyle.avoid.slice(0, 5).map((item) => `- ${item}`).join("\n");
   const prefer = state.cognitionCore.learnedStyle.prefer.slice(0, 5).map((item) => `- ${item}`).join("\n");
@@ -654,7 +715,7 @@ function summarizeCognitionCore() {
   }));
   return {
     self: state.cognitionCore.self,
-    principles: state.cognitionCore.principles,
+    principles: getCompanionPrinciples(),
     companionMode: state.companionMode,
     relationshipLearning: getRelationshipLearning(),
     avoid,
@@ -1376,9 +1437,11 @@ function getOpeningMessage() {
 function getCompanionStage() {
   const memoryCount = state.memories.length;
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  const lifeEventCount = (state.cognitionCore.lifeEvents || []).length;
   const hasName = Boolean(state.profile?.name);
   const relationshipScore =
     memoryCount * 12 +
+    Math.min(lifeEventCount, 20) * 3 +
     Math.min(userMessageCount, 36) * 2 +
     Math.max(0, state.socialPractice.trust - 35) +
     Math.max(0, state.socialPractice.comfort - 35) +
@@ -1419,6 +1482,7 @@ function getGrowthProfile() {
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  const lifeEventCount = (state.cognitionCore.lifeEvents || []).length;
   const knownDays = state.profile?.metAt
     ? Math.max(0, Math.floor((Date.now() - new Date(state.profile.metAt).getTime()) / 86400000))
     : 0;
@@ -1426,7 +1490,12 @@ function getGrowthProfile() {
     (sum, item) => sum + (item.responded || 0) + (item.quieted || 0),
     0,
   );
-  const rawScore = memoryCount * 10 + Math.min(userMessageCount, 40) * 2 + Math.min(knownDays, 30) * 2 + feedbackCount * 4;
+  const rawScore =
+    memoryCount * 10 +
+    Math.min(lifeEventCount, 24) * 3 +
+    Math.min(userMessageCount, 40) * 2 +
+    Math.min(knownDays, 30) * 2 +
+    feedbackCount * 4;
   const progress = Math.min(100, Math.max(8, rawScore));
   const latestLifeEvent = (state.cognitionCore.lifeEvents || [])[0];
   const copy = {
@@ -1455,6 +1524,7 @@ function getGrowthProfile() {
 function getRelationshipLearning() {
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
   const memoryTypes = new Set(state.memories.map((memory) => memory.type));
+  const lifeEvents = state.cognitionCore.lifeEvents || [];
   const relationshipProfile = state.cognitionCore.relationshipProfile || {};
   const meetLabel = relationshipProfile.meetLabel || (state.profile?.metAt ? formatMeetMoment(state.profile.metAt) : "");
   const personalityTexture = relationshipProfile.personalityTexture || "";
@@ -1479,6 +1549,7 @@ function getRelationshipLearning() {
     personalityTexture,
     userMessageCount,
     memoryCount: state.memories.length,
+    growthEventCount: lifeEvents.length,
     learnedParts: pieces,
     latestMoment: latestMoment
       ? {
@@ -2506,6 +2577,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         } else {
           addMessage("friend", reply);
         }
+        reflectCompanionAfterExchange(text, reply);
         if (memoryCandidate?.type === "identity") {
           showMemoryRequest(memoryCandidate);
         } else if (checkInCandidate) {
