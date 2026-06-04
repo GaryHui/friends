@@ -215,54 +215,65 @@
                 </div>
               </div>
               <div class="relationship-note" id="relationship-note"></div>
-              <div class="growth-card" id="growth-card" aria-live="polite">
-                <div>
-                  <span class="growth-kicker">小暖的成长</span>
-                  <strong id="growth-stage">初次见面</strong>
-                  <p id="growth-copy">小暖会先慢一点，等你决定要靠近多少。</p>
-                </div>
-                <div class="growth-meter" aria-hidden="true">
-                  <span id="growth-meter-fill"></span>
-                </div>
-                <small id="growth-next">下一步：从一次舒服的聊天开始。</small>
-              </div>
-              <div class="social-card" id="social-card" aria-live="polite">
-                <div class="social-card-head">
+              <section class="bond-panel" id="bond-panel" aria-label="你和小暖的养成主线">
+                <div class="bond-panel-head">
                   <div>
-                  <span class="growth-kicker">关系成长</span>
-                  <strong id="social-stage">自然认识</strong>
+                    <span class="growth-kicker">养成主线</span>
+                    <strong>你和小暖，慢慢熟起来</strong>
                   </div>
-                  <button id="social-mode-toggle" type="button">开启</button>
+                  <p>选一个今晚的小场景，聊出一点共同经历；被你允许记下的事，会变成你们关系里的小线索。</p>
                 </div>
-                <p id="social-copy">开启后，你和小暖会像真人朋友一样慢慢熟起来。你越信任小暖，小暖也会因为被尊重和认真对待而更愿意靠近。</p>
-                <div class="social-meters" aria-label="小暖对这段相处的感受">
-                  <label>信任 <span><i id="trust-meter"></i></span></label>
-                  <label>安心 <span><i id="comfort-meter"></i></span></label>
-                  <label>亲密 <span><i id="closeness-meter"></i></span></label>
-                </div>
-                <div class="relationship-actions" aria-label="关系成长动作">
-                  <button data-relationship-action="boundary" type="button">告诉边界</button>
-                  <button data-relationship-action="preference" type="button">告诉偏好</button>
-                  <button data-relationship-action="ritual" type="button">完成小约定</button>
-                  <button data-relationship-action="feedback" type="button">给小暖反馈</button>
-                </div>
-                <small id="social-feedback">亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。</small>
-              </div>
-              <div class="scene-card hidden" id="scene-card" aria-live="polite">
-                <div class="scene-card-head">
-                  <div>
-                    <span class="growth-kicker">小暖的场景</span>
-                    <strong id="scene-title">今晚在客厅</strong>
+                <div class="bond-panel-grid">
+                  <div class="growth-card" id="growth-card" aria-live="polite">
+                    <div>
+                      <span class="growth-kicker">关系阶段</span>
+                      <strong id="growth-stage">初次见面</strong>
+                      <p id="growth-copy">小暖会先慢一点，等你决定要靠近多少。</p>
+                    </div>
+                    <div class="growth-meter" aria-hidden="true">
+                      <span id="growth-meter-fill"></span>
+                    </div>
+                    <small id="growth-next">下一步：从一次舒服的聊天开始。</small>
                   </div>
-                  <small id="scene-copy">选择一个小场景，让你们有一段共同经历。</small>
+                  <div class="social-card" id="social-card" aria-live="polite">
+                    <div class="social-card-head">
+                      <div>
+                      <span class="growth-kicker">小暖的感受</span>
+                      <strong id="social-stage">自然认识</strong>
+                      </div>
+                      <button id="social-mode-toggle" type="button">开启</button>
+                    </div>
+                    <p id="social-copy">开启后，你和小暖会像真人朋友一样慢慢熟起来。你越信任小暖，小暖也会因为被尊重和认真对待而更愿意靠近。</p>
+                    <div class="social-meters" aria-label="小暖对这段相处的感受">
+                      <label>信任 <span><i id="trust-meter"></i></span></label>
+                      <label>安心 <span><i id="comfort-meter"></i></span></label>
+                      <label>亲密 <span><i id="closeness-meter"></i></span></label>
+                    </div>
+                    <div class="relationship-actions" aria-label="关系成长动作">
+                      <button data-relationship-action="boundary" type="button">告诉边界</button>
+                      <button data-relationship-action="preference" type="button">告诉偏好</button>
+                      <button data-relationship-action="ritual" type="button">完成小约定</button>
+                      <button data-relationship-action="feedback" type="button">给小暖反馈</button>
+                    </div>
+                    <small id="social-feedback">亲密不是讨好出来的，是在尊重、倾听和稳定回应里慢慢长出来的。</small>
+                  </div>
+                  <div class="scene-card hidden" id="scene-card" aria-live="polite">
+                    <div class="scene-card-head">
+                      <div>
+                        <span class="growth-kicker">共同经历</span>
+                        <strong id="scene-title">今晚一起做什么</strong>
+                      </div>
+                      <small id="scene-copy">选一个小场景，让你们不只是问答，而是真的一起待一会儿。</small>
+                    </div>
+                    <div class="scene-options" aria-label="选择陪伴场景">
+                      <button data-scene-id="walk" type="button">夜晚散步</button>
+                      <button data-scene-id="cafe" type="button">窗边咖啡</button>
+                      <button data-scene-id="bedtime" type="button">睡前十分钟</button>
+                      <button data-scene-id="game" type="button">默契小游戏</button>
+                    </div>
+                  </div>
                 </div>
-                <div class="scene-options" aria-label="选择陪伴场景">
-                  <button data-scene-id="walk" type="button">夜晚散步</button>
-                  <button data-scene-id="cafe" type="button">窗边咖啡</button>
-                  <button data-scene-id="bedtime" type="button">睡前十分钟</button>
-                  <button data-scene-id="game" type="button">默契小游戏</button>
-                </div>
-              </div>
+              </section>
               <p class="privacy-whisper">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
 
               <div class="conversation-stage">

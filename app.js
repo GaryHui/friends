@@ -310,6 +310,7 @@ const modeSwitchNoteEl = document.querySelector("#mode-switch-note");
 const modeSwitchButtons = document.querySelectorAll("[data-companion-mode]");
 const roomWhisperEl = document.querySelector("#room-whisper");
 const relationshipNoteEl = document.querySelector("#relationship-note");
+const bondPanelEl = document.querySelector("#bond-panel");
 const growthStageEl = document.querySelector("#growth-stage");
 const growthCopyEl = document.querySelector("#growth-copy");
 const growthNextEl = document.querySelector("#growth-next");
@@ -327,6 +328,11 @@ const socialFeedbackEl = document.querySelector("#social-feedback");
 const trustMeterEl = document.querySelector("#trust-meter");
 const comfortMeterEl = document.querySelector("#comfort-meter");
 const closenessMeterEl = document.querySelector("#closeness-meter");
+
+function renderBondPanelVisibility() {
+  if (!bondPanelEl) return;
+  bondPanelEl.classList.toggle("hidden", !isRelationshipCompanionActive());
+}
 const memberBackEl = document.querySelector("#member-back");
 const memberCheckoutEl = document.querySelector("#member-checkout");
 const memberPaymentNoteEl = document.querySelector("#member-payment-note");
@@ -1729,7 +1735,9 @@ function getRelationshipLearning() {
 
 function renderGrowthCard() {
   if (!growthStageEl || !growthCopyEl || !growthNextEl || !growthMeterFillEl) return;
-  growthStageEl.closest(".growth-card")?.classList.add("hidden");
+  renderBondPanelVisibility();
+  const growthCardEl = growthStageEl.closest(".growth-card");
+  growthCardEl?.classList.toggle("hidden", !state.session);
   if (!state.session) return;
   const growth = getGrowthProfile();
   growthStageEl.textContent = growth.stage.label;
@@ -1840,6 +1848,7 @@ function setCompanionMode(mode, options = {}) {
 
 function renderSocialPractice() {
   if (!socialCardEl || !socialStageEl || !socialCopyEl || !socialModeToggleEl) return;
+  renderBondPanelVisibility();
   const signedIn = Boolean(state.session);
   const visible = signedIn && (isDomesticVariant() || ["social", "romance", "relationship"].includes(state.companionMode));
   socialCardEl.classList.toggle("hidden", !visible);
@@ -2015,6 +2024,7 @@ function growRelationshipFromAction({ trust = 0, comfort = 0, closeness = 0, fee
 
 function renderSceneCard() {
   if (!sceneCardEl) return;
+  renderBondPanelVisibility();
   const visible = isRelationshipCompanionActive();
   sceneCardEl.classList.toggle("hidden", !visible);
   if (!visible) return;
@@ -2733,7 +2743,7 @@ function makeReply(text) {
   const base = responses[state.tone][Math.floor(Math.random() * responses[state.tone].length)];
 
   if (/不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|没兴趣|模板|客服|冷冰冰/.test(lower)) {
-    return "你说得对，刚才那种回法太像“收到你的问题，然后给一段正确答案”了。\n\n如果我是小暖，我不该只是在旁边念安慰词。我应该真的接住你话里的东西，比如你现在不是想要一个标准回复，你是想要一个能陪你把话聊下去、不会敷衍你的人。\n\n那我从这里重新来：你刚才试着和我聊的时候，最让你失望的是哪一下？是我太客气、太短、太会讲道理，还是没有真的顺着你的话继续走？";
+    return "嗯，这下我听懂了。\n\n刚才那种回法太像在交作业，不像一个人真的坐在你旁边。小暖不该只会把话说正确，她要会接话、会在意、也要有一点自己的反应。\n\n那我先不解释了。你刚刚最烦我的哪一点？太客气、太空，还是每次都像在给标准答案？";
   }
 
   if (/复盘|review|总结|发生了什么/.test(lower)) {
