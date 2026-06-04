@@ -3,8 +3,8 @@ const state = {
   profile: JSON.parse(localStorage.getItem("nuanyou-profile") || "null"),
   memories: JSON.parse(localStorage.getItem("nuanyou-memories") || "[]"),
   pendingMemory: null,
-  messages: JSON.parse(localStorage.getItem("nuanyou-messages") || "[]"),
-  moods: JSON.parse(localStorage.getItem("nuanyou-moods") || "[]"),
+  messages: [],
+  moods: [],
   supabase: null,
   session: null,
   breathTimer: null,
@@ -13,6 +13,8 @@ const state = {
   diaryPageIndex: 0,
   selectedDiaryMessages: new Set(),
   memoryLoginNoticeShown: localStorage.getItem("nuanyou-memory-login-notice") === "1",
+  privacyTimeoutSeconds: Number(localStorage.getItem("nuanyou-privacy-timeout") || "120"),
+  privacyDeadline: Date.now() + Number(localStorage.getItem("nuanyou-privacy-timeout") || "120") * 1000,
 };
 
 const responses = {
@@ -53,26 +55,126 @@ const diaryDaysEl = document.querySelector("#diary-days");
 const diaryDateTitleEl = document.querySelector("#diary-date-title");
 const diarySelectedCountEl = document.querySelector("#diary-selected-count");
 const diaryEntryListEl = document.querySelector("#diary-entry-list");
+const recordsLoginGateEl = document.querySelector("#records-login-gate");
+const recordsLoginButtonEl = document.querySelector("#records-login-button");
 const authPanelEl = document.querySelector("#auth-panel");
 const authToggleEl = document.querySelector("#auth-toggle");
 const authFormEl = document.querySelector("#auth-form");
 const authStatusEl = document.querySelector("#auth-status");
 const googleLoginEl = document.querySelector("#google-login");
+const authCloseEl = document.querySelector("#auth-close");
+const authLogoutEl = document.querySelector("#auth-logout");
+const accountCardEl = document.querySelector("#account-card");
+const accountEmailEl = document.querySelector("#account-email");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
 const roomWhisperEl = document.querySelector("#room-whisper");
+const memberBackEl = document.querySelector("#member-back");
+const memberCheckoutEl = document.querySelector("#member-checkout");
+const memberPaymentNoteEl = document.querySelector("#member-payment-note");
+const privacyTimerEl = document.querySelector("#privacy-timer");
+const privacyCountdownEl = document.querySelector("#privacy-countdown");
+const privacyTimerCopyEl = document.querySelector("#privacy-timer-copy");
+const privacyTimeoutSelectEl = document.querySelector("#privacy-timeout-select");
+let privacyTimerId = null;
 
 function persist() {
   localStorage.setItem("nuanyou-tone", state.tone);
+  if (!state.session) {
+    localStorage.removeItem("nuanyou-profile");
+    localStorage.removeItem("nuanyou-memories");
+    localStorage.removeItem("nuanyou-messages");
+    localStorage.removeItem("nuanyou-moods");
+    return;
+  }
   localStorage.setItem("nuanyou-profile", JSON.stringify(state.profile));
   localStorage.setItem("nuanyou-memories", JSON.stringify(state.memories));
   localStorage.setItem("nuanyou-messages", JSON.stringify(state.messages));
   localStorage.setItem("nuanyou-moods", JSON.stringify(state.moods));
 }
 
+function clearLocalPrivateCache() {
+  state.profile = null;
+  state.memories = [];
+  state.messages = [];
+  state.moods = [];
+  state.pendingMemory = null;
+  state.selectedDiaryMessages.clear();
+  state.memoryLoginNoticeShown = false;
+  clearStoredPrivateCache();
+  appShellEl.classList.add("intro-mode");
+  document.querySelectorAll(".view").forEach((item) => item.classList.remove("active"));
+  document.querySelector("#intro-view").classList.add("active");
+  pageTitleEl.textContent = "先认识一下，好吗？";
+  topEyebrowEl.textContent = "第一次见面";
+  hideMemoryRequest();
+  renderMessages();
+  renderMoods();
+  renderRecords();
+}
+
+function formatCountdown(ms) {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const rest = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${rest}`;
+}
+
+function resetPrivacyTimer() {
+  if (state.privacyTimeoutSeconds <= 0) {
+    updatePrivacyTimer();
+    return;
+  }
+  state.privacyDeadline = Date.now() + state.privacyTimeoutSeconds * 1000;
+  updatePrivacyTimer();
+}
+
+async function autoPrivacyExit() {
+  if (state.supabase && state.session) {
+    await state.supabase.auth.signOut();
+    state.session = null;
+  }
+  clearLocalPrivateCache();
+  authPanelEl.classList.remove("hidden");
+  authStatusEl.textContent = "为了保护隐私，页面已因一段时间无活动自动退出，并清除了当前页面记录。";
+  updateAuthUi();
+  resetPrivacyTimer();
+}
+
+function updatePrivacyTimer() {
+  if (state.privacyTimeoutSeconds <= 0) {
+    privacyCountdownEl.textContent = "关闭";
+    privacyTimerCopyEl.textContent = "自动退出已关闭。共用设备上建议手动退出并清除本机记录。";
+    privacyTimerEl.classList.remove("urgent");
+    return;
+  }
+  const remaining = state.privacyDeadline - Date.now();
+  privacyCountdownEl.textContent = formatCountdown(remaining);
+  privacyTimerCopyEl.textContent = `${Math.round(state.privacyTimeoutSeconds / 60)} 分钟没有页面活动，会自动退出并清空当前页面记录。`;
+  privacyTimerEl.classList.toggle("urgent", remaining <= 30000);
+  if (remaining <= 0) {
+    window.clearInterval(privacyTimerId);
+    privacyTimerId = null;
+    autoPrivacyExit();
+  }
+}
+
+function startPrivacyTimer() {
+  resetPrivacyTimer();
+  if (privacyTimerId) window.clearInterval(privacyTimerId);
+  privacyTimerId = window.setInterval(updatePrivacyTimer, 1000);
+}
+
+function setPrivacyTimeout(seconds) {
+  state.privacyTimeoutSeconds = seconds;
+  localStorage.setItem("nuanyou-privacy-timeout", String(seconds));
+  privacyTimeoutSelectEl.value = String(seconds);
+  resetPrivacyTimer();
+}
+
 function createMessage(role, text, kind = "", options = {}) {
-  const { persistNow = true, syncNow = true } = options;
+  const { persistNow = true } = options;
   const message = {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     role,
@@ -84,7 +186,6 @@ function createMessage(role, text, kind = "", options = {}) {
   if (persistNow) persist();
   renderMessages();
   if (persistNow) renderRecords();
-  if (syncNow) syncMessage(message);
   return message;
 }
 
@@ -93,14 +194,13 @@ function addMessage(role, text, kind = "") {
 }
 
 function updateMessage(message, text, options = {}) {
-  const { persistNow = false, syncNow = false } = options;
+  const { persistNow = false } = options;
   message.text = text;
   renderMessages();
   if (persistNow) {
     persist();
     renderRecords();
   }
-  if (syncNow) syncMessage(message);
 }
 
 function renderMessages() {
@@ -143,7 +243,7 @@ function showMemoryLoginNotice() {
   localStorage.setItem("nuanyou-memory-login-notice", "1");
   addMessage(
     "friend",
-    "先轻轻提醒你一下：如果现在没有登录，我可以陪你聊，但这些长期记忆不会同步到你的账号里。等你愿意让小暖下次也认出你、记得你授权留下的事，可以点右上角“登录”建立档案；你仍然可以随时删除记录。",
+    "先轻轻提醒你一下：为了回复你，当前对话会交给 AI 处理；但我不会把普通聊天默认保存成账号记忆。只有你点头允许记下的事，才会同步到你的档案里。",
   );
 }
 
@@ -204,6 +304,19 @@ function clampDiaryPage() {
 
 function renderRecords() {
   memoryListEl.innerHTML = "";
+  const hasDiaryAccess = Boolean(state.session);
+  recordsLoginGateEl.classList.toggle("hidden", hasDiaryAccess);
+  document.querySelector(".privacy-card").classList.toggle("hidden", !hasDiaryAccess);
+  diaryClosedEl.classList.toggle("hidden", !hasDiaryAccess || state.diaryOpen);
+  diaryOpenEl.classList.toggle("hidden", !hasDiaryAccess || !state.diaryOpen);
+  document.querySelector("#clear-all-records").classList.toggle("hidden", !hasDiaryAccess);
+
+  if (!hasDiaryAccess) {
+    memoryListEl.innerHTML = '<p class="muted">还没有开启账号记忆。随便聊聊时，小暖不会留下日记本。</p>';
+    diaryDaysEl.innerHTML = "";
+    diaryEntryListEl.innerHTML = "";
+    return;
+  }
 
   if (state.memories.length === 0) {
     memoryListEl.innerHTML = '<p class="muted">还没有长期记忆。小暖想记住什么，会先问你。</p>';
@@ -222,8 +335,6 @@ function renderRecords() {
     });
   }
 
-  diaryClosedEl.classList.toggle("hidden", state.diaryOpen);
-  diaryOpenEl.classList.toggle("hidden", !state.diaryOpen);
   const pages = clampDiaryPage();
   diaryDaysEl.innerHTML = "";
   diaryEntryListEl.innerHTML = "";
@@ -340,14 +451,23 @@ async function initSupabase() {
     state.supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
     const { data } = await state.supabase.auth.getSession();
     state.session = data.session;
+    if (!state.session) {
+      clearStoredPrivateCache();
+      state.profile = null;
+      state.memories = [];
+      state.moods = [];
+    }
     updateAuthUi();
     if (state.session) {
       await syncLocalStateRemote();
       await loadCloudState();
     }
 
-    state.supabase.auth.onAuthStateChange(async (_event, session) => {
+    state.supabase.auth.onAuthStateChange(async (event, session) => {
       state.session = session;
+      if (event === "SIGNED_OUT") {
+        clearLocalPrivateCache();
+      }
       updateAuthUi();
       if (session) {
         await syncLocalStateRemote();
@@ -364,20 +484,38 @@ function updateAuthUi() {
   if (!state.supabase) {
     authToggleEl.textContent = "本地";
     authToggleEl.disabled = true;
+    accountCardEl.classList.add("hidden");
+    googleLoginEl.classList.remove("hidden");
+    authFormEl.classList.remove("hidden");
     memoryLoginNoteEl.classList.remove("hidden");
     return;
   }
+  const email = state.session?.user?.email || "";
+  const label = email ? email.split("@")[0].slice(0, 12) : "";
   authToggleEl.disabled = false;
-  authToggleEl.textContent = state.session ? "退出" : "登录";
-  authStatusEl.textContent = state.session ? "已登录，记录会同步到你的账号。" : "";
+  authToggleEl.textContent = state.session ? label || "已登录" : "登录";
+  authToggleEl.title = state.session ? `已用 ${email || "当前账号"} 登录` : "登录后，小暖可以保存你授权留下的记忆";
+  accountEmailEl.textContent = email || "当前账号";
+  accountCardEl.classList.toggle("hidden", !state.session);
+  googleLoginEl.classList.toggle("hidden", Boolean(state.session));
+  authFormEl.classList.toggle("hidden", Boolean(state.session));
+  authStatusEl.textContent = state.session ? "已登录。小暖只会把你允许记下的事同步到账号；普通聊天不会默认保存成账号记忆。" : "";
   memoryLoginNoteEl.classList.toggle("hidden", Boolean(state.session));
+}
+
+function clearStoredPrivateCache() {
+  localStorage.removeItem("nuanyou-profile");
+  localStorage.removeItem("nuanyou-memories");
+  localStorage.removeItem("nuanyou-messages");
+  localStorage.removeItem("nuanyou-moods");
+  localStorage.removeItem("nuanyou-memory-login-notice");
 }
 
 async function loadCloudState() {
   if (!state.supabase || !state.session) return;
 
   const userId = state.session.user.id;
-  const [{ data: profile }, { data: memories }, { data: messages }] = await Promise.all([
+  const [{ data: profile }, { data: memories }] = await Promise.all([
     state.supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
     state.supabase
       .from("memory_cards")
@@ -385,13 +523,6 @@ async function loadCloudState() {
       .eq("user_id", userId)
       .eq("status", "active")
       .order("created_at", { ascending: false }),
-    state.supabase
-      .from("messages")
-      .select("*")
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(100),
   ]);
 
   if (profile) {
@@ -402,6 +533,9 @@ async function loadCloudState() {
     state.tone = profile.companion_tone || state.tone;
   }
 
+  state.messages = JSON.parse(localStorage.getItem("nuanyou-messages") || "[]");
+  state.moods = JSON.parse(localStorage.getItem("nuanyou-moods") || "[]");
+
   if (memories) {
     state.memories = memories.map((memory) => ({
       id: memory.id,
@@ -409,15 +543,6 @@ async function loadCloudState() {
       content: memory.content,
       status: memory.status,
       createdAt: memory.created_at,
-    }));
-  }
-
-  if (messages && messages.length > 0) {
-    state.messages = messages.map((message) => ({
-      id: message.id,
-      role: message.role === "assistant" ? "friend" : "user",
-      text: message.content,
-      at: message.created_at,
     }));
   }
 
@@ -441,21 +566,7 @@ async function saveProfileRemote() {
 async function syncLocalStateRemote() {
   if (!state.supabase || !state.session) return;
   await saveProfileRemote();
-  await Promise.all([
-    ...state.messages.filter((message) => message.text).map((message) => syncMessage(message)),
-    ...state.memories.filter((memory) => memory.status !== "deleted").map((memory) => syncMemory(memory)),
-  ]);
-}
-
-async function syncMessage(message) {
-  if (!state.supabase || !state.session || !message?.text) return;
-  await state.supabase.from("messages").upsert({
-    id: message.id,
-    user_id: state.session.user.id,
-    role: message.role === "friend" ? "assistant" : "user",
-    content: message.text,
-    created_at: message.at,
-  });
+  await Promise.all(state.memories.filter((memory) => memory.status !== "deleted").map((memory) => syncMemory(memory)));
 }
 
 async function syncMemory(memory) {
@@ -473,12 +584,7 @@ async function syncMemory(memory) {
 }
 
 async function deleteMessageRemote(messageId) {
-  if (!state.supabase || !state.session) return;
-  await state.supabase
-    .from("messages")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", messageId)
-    .eq("user_id", state.session.user.id);
+  return messageId;
 }
 
 async function deleteMemoryRemote(memoryId) {
@@ -494,20 +600,111 @@ function hasCrisisLanguage(text) {
   return crisisPatterns.some((pattern) => pattern.test(text));
 }
 
+function extractPreferredName(text) {
+  const cleaned = text.trim().replace(/\s+/g, " ");
+  const patterns = [
+    /用户希望被称呼为[:：]?\s*([^，。！？,.!?、\s]{1,16})/,
+    /(?:我叫|我的名字是|我的名字叫|名字是)([^，。！？,.!?、\s]{1,16})/,
+    /(?:叫我|称呼我|可以叫我|以后叫我)([^，。！？,.!?、\s]{1,16})/,
+  ];
+  const match = patterns.map((pattern) => cleaned.match(pattern)).find(Boolean);
+  if (!match) return "";
+  return match[1]
+    .replace(/^(是|叫|为)/, "")
+    .replace(/(吧|啦|啊|呀|哦|哈)$/, "")
+    .trim();
+}
+
+function rememberPreferredName(name) {
+  if (!name) return;
+  state.profile = {
+    ...(state.profile || {}),
+    name,
+    metAt: state.profile?.metAt || new Date().toISOString(),
+  };
+  topEyebrowEl.textContent = `欢迎你，${name}`;
+  appShellEl.classList.remove("intro-mode");
+  persist();
+  saveProfileRemote();
+}
+
+function repairProfileFromSavedMemories() {
+  if (state.profile?.name) return;
+  const memory = state.memories.find((item) => item?.content && extractPreferredName(item.content));
+  const name = memory ? extractPreferredName(memory.content) : "";
+  if (name) rememberPreferredName(name);
+}
+
+function forgetProfileName() {
+  if (!state.profile?.name) return;
+  state.profile = {
+    ...state.profile,
+    name: "",
+  };
+  topEyebrowEl.textContent = "欢迎回来";
+  persist();
+  saveProfileRemote();
+}
+
+function normalizeForgetKeyword(text) {
+  return text
+    .replace(/^(请|麻烦|帮我|小暖|你可以|你能不能|能不能|可以)?/, "")
+    .replace(/(忘掉|忘记|不要记得|别记得|删除|删掉|清除|去掉|移除|取消记住|不要再记住)/g, "")
+    .replace(/(这件事|这个|这些|那件事|那个|记忆|记录|关于|有关|曾经记下的东西|曾经记下的事)/g, "")
+    .replace(/[，。！？,.!?、\s]/g, "")
+    .trim();
+}
+
+function findMemoriesToForget(text) {
+  if (!/(忘掉|忘记|不要记得|别记得|删除|删掉|清除|去掉|移除|取消记住|不要再记住)/.test(text)) {
+    return null;
+  }
+  if (/(全部|所有|一切|全都)/.test(text)) {
+    return [...state.memories];
+  }
+  if (/(名字|称呼|叫我|怎么叫我)/.test(text)) {
+    return state.memories.filter((memory) => memory.type === "identity" || extractPreferredName(memory.content || ""));
+  }
+  const keyword = normalizeForgetKeyword(text);
+  if (!keyword) return [];
+  return state.memories.filter((memory) => (memory.content || "").replace(/\s+/g, "").includes(keyword));
+}
+
+function forgetMemories(memories) {
+  if (!memories.length) return;
+  const ids = new Set(memories.map((memory) => memory.id));
+  if (memories.some((memory) => memory.type === "identity" || extractPreferredName(memory.content || ""))) {
+    forgetProfileName();
+  }
+  state.memories = state.memories.filter((memory) => !ids.has(memory.id));
+  memories.forEach((memory) => deleteMemoryRemote(memory.id));
+  persist();
+  renderRecords();
+}
+
 function detectMemoryCandidate(text) {
   const cleaned = text.trim().replace(/\s+/g, " ");
   const patterns = [
     {
-      type: "preference",
+      type: "identity",
       test: /叫我|称呼我|我叫|我的名字|可以叫我/,
-      content: cleaned,
-      prompt: `我听到你在说怎么称呼你。要不要让我以后记得：“${cleaned}”？`,
+      content: extractPreferredName(cleaned) ? `用户希望被称呼为：${extractPreferredName(cleaned)}` : cleaned,
+      name: extractPreferredName(cleaned),
+      prompt: extractPreferredName(cleaned)
+        ? `我听到你想让我叫你“${extractPreferredName(cleaned)}”。要不要让我以后记得这个名字？`
+        : `我听到你在说怎么称呼你。要不要让我以后记得：“${cleaned}”？`,
     },
     {
       type: "preference",
       test: /我喜欢|我不喜欢|不要.*安慰|别.*说教|希望你/,
       content: cleaned,
       prompt: `这像是你希望被陪伴的方式。要不要让我以后记得：“${cleaned}”？`,
+    },
+    {
+      type: "personality",
+      test: /我的性格|我是.*的人|我比较|我有点|我很容易|记住.*性格|记下.*性格|我是内向|我是外向|我敏感|我慢热|我容易焦虑|我容易紧张/,
+      content: cleaned,
+      prompt: `这像是在说你的性格和相处方式。要不要让我以后记得：“${cleaned}”？`,
     },
     {
       type: "trigger",
@@ -678,23 +875,36 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   if (shouldShowMemoryLoginNotice()) {
     showMemoryLoginNotice();
   }
+  const forgetMatches = findMemoriesToForget(text);
   const memoryCandidate = detectMemoryCandidate(text);
 
   window.setTimeout(async () => {
     try {
       if (hasCrisisLanguage(text)) {
         showCrisisSupport();
+      } else if (forgetMatches) {
+        if (forgetMatches.length > 0) {
+          forgetMemories(forgetMatches);
+          addMessage(
+            "friend",
+            forgetMatches.length === 1
+              ? "好，我已经把这件事忘掉了。以后不会再拿它当作长期记忆。"
+              : `好，我已经删掉 ${forgetMatches.length} 条长期记忆。以后不会再拿它们当作了解你的依据。`,
+          );
+        } else {
+          addMessage("friend", "可以。只是我没确定你想让我忘掉哪一条。你可以说得更具体一点，或者去“记录”里直接删除。");
+        }
       } else {
         let streamedMessage = null;
         const reply = await getAiReply(text, (_delta, fullText) => {
           if (!streamedMessage) {
             setThinking(false);
-            streamedMessage = createMessage("friend", "", "", { persistNow: false, syncNow: false });
+            streamedMessage = createMessage("friend", "", "", { persistNow: false });
           }
           updateMessage(streamedMessage, fullText);
         });
         if (streamedMessage) {
-          updateMessage(streamedMessage, reply, { persistNow: true, syncNow: true });
+          updateMessage(streamedMessage, reply, { persistNow: true });
         } else {
           addMessage("friend", reply);
         }
@@ -730,8 +940,16 @@ document.querySelector("#remember-yes").addEventListener("click", () => {
     ...state.pendingMemory,
     status: "active",
   };
+  if (memory.type === "identity" && memory.name) {
+    rememberPreferredName(memory.name);
+  }
   state.memories.unshift(memory);
-  addMessage("friend", "好，我会记住这件事。以后我会更小心地按你的方式靠近你。");
+  addMessage(
+    "friend",
+    memory.type === "identity" && memory.name
+      ? `好，我记住了。以后我会叫你${memory.name}。`
+      : "好，我会记住这件事。以后我会更小心地按你的方式靠近你。",
+  );
   hideMemoryRequest();
   persist();
   renderRecords();
@@ -806,15 +1024,22 @@ document.querySelector("#reset-profile").addEventListener("click", () => {
   topEyebrowEl.textContent = "第一次见面";
 });
 
-authToggleEl.addEventListener("click", async () => {
+authToggleEl.addEventListener("click", () => {
   if (!state.supabase) return;
-  if (state.session) {
-    await state.supabase.auth.signOut();
-    state.session = null;
-    updateAuthUi();
-    return;
-  }
   authPanelEl.classList.toggle("hidden");
+});
+
+authCloseEl.addEventListener("click", () => {
+  authPanelEl.classList.add("hidden");
+});
+
+authLogoutEl.addEventListener("click", async () => {
+  if (!state.supabase) return;
+  await state.supabase.auth.signOut();
+  state.session = null;
+  clearLocalPrivateCache();
+  authPanelEl.classList.add("hidden");
+  updateAuthUi();
 });
 
 memoryLoginButtonEl.addEventListener("click", () => {
@@ -824,8 +1049,20 @@ memoryLoginButtonEl.addEventListener("click", () => {
     return;
   }
   authPanelEl.classList.remove("hidden");
-  authStatusEl.textContent = "输入邮箱后，我会发一封登录链接。登录后，小暖才会拥有账号记忆。";
+  authStatusEl.textContent = "输入邮箱后，我会发一封登录链接。登录后，小暖只会同步你允许记下的事；普通聊天不会默认保存成账号记忆。";
   document.querySelector("#auth-email").focus();
+});
+
+recordsLoginButtonEl.addEventListener("click", () => {
+  authPanelEl.classList.remove("hidden");
+  authStatusEl.textContent = state.supabase
+    ? "登录后才会开启私人日记本；随便聊聊时不会留下本机记录。"
+    : "当前环境还没有连上 Supabase 登录配置。请先用线上 Vercel 地址打开网站。";
+  document.querySelector("#auth-email")?.focus();
+});
+
+privacyTimeoutSelectEl.addEventListener("change", () => {
+  setPrivacyTimeout(Number(privacyTimeoutSelectEl.value));
 });
 
 googleLoginEl.addEventListener("click", async () => {
@@ -903,8 +1140,23 @@ function switchView(view) {
 
 document.querySelectorAll(".nav-tab, .tiny-member").forEach((button) => {
   button.addEventListener("click", () => {
+    if (!button.dataset.view) return;
     switchView(button.dataset.view);
   });
+});
+
+memberBackEl.addEventListener("click", () => {
+  switchView("chat");
+});
+
+memberCheckoutEl.addEventListener("click", () => {
+  memberPaymentNoteEl.textContent = state.session
+    ? "下一步接入支付后，这里会跳转到 Stripe Checkout 或你选择的支付平台。支付成功后，会员状态会写回你的账号。"
+    : "开通会员前需要先登录账号，这样支付成功后才能把会员状态绑定到你。";
+  if (!state.session) {
+    authPanelEl.classList.remove("hidden");
+    authStatusEl.textContent = "先登录账号，再开通会员。这样会员和记忆档案才能属于同一个人。";
+  }
 });
 
 document.querySelector("#clear-all-records").addEventListener("click", () => {
@@ -1077,11 +1329,18 @@ document.querySelectorAll("#step-grid button").forEach((button) => {
   });
 });
 
+["click", "keydown", "input", "scroll", "touchstart"].forEach((eventName) => {
+  window.addEventListener(eventName, resetPrivacyTimer, { passive: true });
+});
+
 renderMessages();
 renderMoods();
 renderRecords();
+repairProfileFromSavedMemories();
 updateAuthUi();
+privacyTimeoutSelectEl.value = String(state.privacyTimeoutSeconds);
 initSupabase();
+startPrivacyTimer();
 
 if (state.profile) {
   appShellEl.classList.remove("intro-mode");

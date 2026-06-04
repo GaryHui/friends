@@ -291,7 +291,12 @@ h4 {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.hidden {
+  display: none !important;
+}
+
 .auth-panel {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
   gap: 16px;
@@ -303,6 +308,24 @@ h4 {
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: var(--soft-shadow);
+}
+
+.panel-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  min-height: 30px;
+  padding: 5px 10px;
+  color: rgba(94, 69, 52, 0.72);
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.panel-close:hover {
+  background: #fff;
 }
 
 .google-button {
@@ -338,6 +361,50 @@ h4 {
 
 .auth-panel.hidden {
   display: none;
+}
+
+.account-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.account-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.account-card strong {
+  color: var(--moss);
+  overflow-wrap: anywhere;
+}
+
+.privacy-timeout-setting {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.privacy-timeout-setting select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.auth-danger-button {
+  width: 100%;
+  min-height: 42px;
+  font-weight: 900;
 }
 
 .auth-panel p {
@@ -407,22 +474,24 @@ h4 {
 
 .trust-note {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   max-width: 650px;
   margin-top: 18px;
-  padding: 14px 16px;
-  background: rgba(255, 247, 232, 0.82);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(145deg, rgba(255, 247, 232, 0.86), rgba(248, 252, 245, 0.78));
+  border: 1px solid rgba(127, 95, 70, 0.16);
+  border-radius: 16px;
 }
 
 .trust-note strong {
+  max-width: 560px;
   color: var(--tea-dark);
+  line-height: 1.5;
 }
 
 .trust-note span {
   color: var(--muted);
-  line-height: 1.65;
+  line-height: 1.7;
 }
 
 .intro-form {
@@ -690,6 +759,51 @@ h4 {
 .memory-login-note .text-button {
   flex: 0 0 auto;
   margin: 0;
+}
+
+.privacy-whisper {
+  margin: 0 0 10px;
+  color: rgba(117, 111, 104, 0.78);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.privacy-timer {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 2px 0 10px;
+  padding: 9px 12px;
+  color: rgba(94, 69, 52, 0.76);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(127, 95, 70, 0.14);
+  border-radius: 14px;
+  font-size: 12px;
+}
+
+.privacy-timer span {
+  font-weight: 850;
+}
+
+.privacy-timer strong {
+  color: var(--moss);
+  font-size: 14px;
+}
+
+.privacy-timer p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.privacy-timer.urgent {
+  background: rgba(255, 240, 235, 0.9);
+  border-color: rgba(201, 122, 104, 0.34);
+}
+
+.privacy-timer.urgent strong {
+  color: #8a4037;
 }
 
 .thinking {
@@ -1004,8 +1118,33 @@ select:focus {
   padding: 26px;
 }
 
+.membership-head {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
 .membership-list {
   margin-top: 18px;
+}
+
+.membership-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.membership-actions p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .safety-hero {
@@ -1028,6 +1167,64 @@ select:focus {
 
 .diary-panel {
   overflow: hidden;
+}
+
+.privacy-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  gap: 18px;
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(248, 252, 245, 0.78);
+  border: 1px solid rgba(87, 117, 104, 0.18);
+  border-radius: 16px;
+}
+
+.privacy-card strong {
+  color: var(--moss);
+}
+
+.privacy-card p,
+.privacy-card li {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.privacy-card p {
+  margin: 8px 0 0;
+}
+
+.privacy-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.records-login-gate {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 20px;
+  background: rgba(255, 247, 232, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.records-login-gate strong {
+  color: var(--tea-dark);
+  font-size: 18px;
+}
+
+.records-login-gate p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.records-login-gate .primary-button {
+  justify-self: start;
 }
 
 .diary-closed {
@@ -1401,10 +1598,17 @@ select:focus {
   .two-column,
   .insight-grid,
   .membership-list,
+  .auth-panel,
   .diary-closed,
   .diary-book,
   .support-grid {
     grid-template-columns: 1fr;
+  }
+
+  .membership-head,
+  .membership-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .intro-card {

@@ -73,9 +73,25 @@
         </section>
 
         <section class="auth-panel hidden" id="auth-panel" aria-label="登录">
+          <button class="panel-close" id="auth-close" type="button" aria-label="关闭登录面板">返回</button>
           <div>
             <p class="eyebrow">建立你的档案</p>
-            <p>如果你喜欢小暖的陪伴，可以用 Google 或邮箱登录。登录后，小暖才能在下次认出你，并保存你授权留下的聊天和记忆。你仍然可以随时删除。</p>
+            <p>如果你喜欢小暖的陪伴，可以用 Google 或邮箱登录。登录后，小暖才能在下次认出你，并保存你明确允许记下的事。普通聊天不会默认保存成账号记忆。</p>
+          </div>
+          <div class="account-card hidden" id="account-card">
+            <span>当前账号</span>
+            <strong id="account-email">还没有登录</strong>
+            <label class="privacy-timeout-setting">
+              自动退出
+              <select id="privacy-timeout-select">
+                <option value="120">2 分钟</option>
+                <option value="300">5 分钟</option>
+                <option value="600">10 分钟</option>
+                <option value="1800">30 分钟</option>
+                <option value="0">关闭</option>
+              </select>
+            </label>
+            <button class="danger-button auth-danger-button" id="auth-logout" type="button">退出并清除本机记录</button>
           </div>
           <button class="google-button" id="google-login" type="button">
             <span aria-hidden="true">G</span>
@@ -98,8 +114,16 @@
                 我知道怎么称呼你，也知道你希望我用哪种方式靠近你。
               </p>
               <div class="trust-note">
-                <strong>你一直有控制权。</strong>
-                <span>你可以回看和小暖聊过什么，也可以删除任何一条聊天或记忆。小暖想长期记住某件事时，会先问你。</span>
+                <strong>我们想做一个能慢慢熟起来的虚拟朋友，也想诚实面对隐私问题。</strong>
+                <span>
+                  陪伴一定会听到一些很私人的话，所以小暖不会假装这里完全没有风险。为了回复你，当前对话会交给 AI 服务处理；但普通聊天不会默认保存成账号记忆。
+                </span>
+                <span>
+                  我们让小暖只记你点头允许的事，并尽量把它压缩成偏好、边界和陪伴方式，而不是保存原始倾诉。你可以回看、删除，也可以直接说“忘掉这件事”。
+                </span>
+                <span>
+                  我们希望记忆让小暖更像老朋友，而不是越界地窥探你。小暖想长期记住某件事时，会先问你；你一直有控制权。
+                </span>
               </div>
               <form class="intro-form" id="intro-form">
                 <label>
@@ -148,9 +172,10 @@
               </div>
 
               <div class="memory-login-note hidden" id="memory-login-note">
-                <span>现在可以直接聊；如果希望小暖下次也认出你、记住你授权留下的事，需要先登录建立档案。</span>
+                <span>小暖只会记下你点头允许的事。为了回复你，当前对话会交给 AI 处理；但普通聊天不会默认变成账号记忆。</span>
                 <button class="text-button" id="memory-login-button" type="button">去登录</button>
               </div>
+              <p class="privacy-whisper">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
 
               <div class="conversation-stage">
                 <div class="companion-room" aria-label="小暖的房间">
@@ -184,6 +209,12 @@
                 <button type="button" data-prompt="我今天最难受的一刻是：">最难受的一刻</button>
                 <button type="button" data-prompt="我想把今天发生的事慢慢复盘一下：">复盘今天</button>
                 <button type="button" data-prompt="请陪我做一个今晚能完成的小计划：">今晚小计划</button>
+              </div>
+
+              <div class="privacy-timer" id="privacy-timer" aria-live="polite">
+                <span>隐私保护</span>
+                <strong id="privacy-countdown">02:00</strong>
+                <p id="privacy-timer-copy">2 分钟没有操作，会自动退出并清空当前页面记录。</p>
               </div>
 
               <form class="composer" id="chat-form">
@@ -296,6 +327,24 @@
               <button class="ghost-button" id="clear-all-records" type="button">全部清空</button>
             </div>
 
+            <div class="records-login-gate hidden" id="records-login-gate">
+              <strong>随便聊聊时，不会留下日记本。</strong>
+              <p>没有登录时，小暖只陪你完成这一次对话；刷新或离开后，本机不会继续保存聊天记录。登录后，才会开启私人日记本和你授权留下的长期记忆。</p>
+              <button class="primary-button" id="records-login-button" type="button">登录后开启日记本</button>
+            </div>
+
+            <div class="privacy-card" aria-label="隐私说明">
+              <div>
+                <strong>你说过的话，不会默认变成云端记忆。</strong>
+                <p>为了生成回复，当前对话会发送给 AI 服务处理；但完整聊天不会默认保存到账号里。小暖只会把你明确允许记下的事同步成长期记忆。</p>
+              </div>
+              <ul>
+                <li>点“记住”才会保存为长期记忆</li>
+                <li>可以在这里删除，也可以直接说“忘掉这件事”</li>
+                <li>退出账号会清除本机私密缓存</li>
+              </ul>
+            </div>
+
             <div class="diary-closed" id="diary-closed">
               <button class="ebook-cover" id="open-diary" type="button" aria-label="翻开私人日记本">
                 <span class="ebook-cover-ridge" aria-hidden="true"></span>
@@ -346,8 +395,13 @@
 
         <section class="view" id="plans-view" aria-labelledby="plans-heading">
           <section class="panel membership-panel">
-            <p class="eyebrow">会员</p>
-            <h3 id="plans-heading">更多陪伴可以以后再说，今晚先不用急</h3>
+            <div class="membership-head">
+              <div>
+                <p class="eyebrow">会员</p>
+                <h3 id="plans-heading">更多陪伴可以以后再说，今晚先不用急</h3>
+              </div>
+              <button class="ghost-button" id="member-back" type="button">回到聊天</button>
+            </div>
             <p>
               暖友会先把基础倾诉和安全支持做好。会员只是给愿意长期使用的人准备的额外能力，比如记住你的偏好、语音陪伴、睡前总结和更多朋友形象。
             </p>
@@ -364,6 +418,10 @@
                 <strong>自己的朋友形象</strong>
                 <p>声音、头像、性格，都可以更贴近你。</p>
               </article>
+            </div>
+            <div class="membership-actions">
+              <button class="primary-button" id="member-checkout" type="button">以后开通会员</button>
+              <p id="member-payment-note">支付会放在这里，不会出现在主聊天界面。正式接入时会先登录账号，再跳转到安全的支付页面。</p>
             </div>
           </section>
         </section>
