@@ -2633,6 +2633,16 @@ function isAskingKnownIdentity(text) {
   return /(你知道我是谁|你还记得我吗|你记得我吗|我是谁|我的名字|我叫什么|你知道我叫什么)/.test(text);
 }
 
+function isCriticizingTone(text) {
+  return /(好陌生|太陌生|语气.*陌生|说话.*陌生|好冷|太冷|很冷|生硬|像客服|像机器人|不像你|没有人味|好假|太假)/.test(text);
+}
+
+function makeToneRepairReply() {
+  const name = getKnownPreferredName();
+  const call = name ? `，${name}` : "";
+  return `嗯${call}，刚才那句确实冷。\n\n像在核对资料，不像在认你。这个我得改。\n\n重新说：我记得你，也不该让你一遍遍证明自己是谁。`;
+}
+
 function getActiveMemories() {
   return state.memories.filter((memory) => memory?.status !== "deleted" && memory?.content);
 }
@@ -3090,7 +3100,9 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         }
       } else if (isAskingKnownIdentity(text) && knownName) {
         rememberPreferredName(knownName);
-        addMessage("friend", `${knownName}。\n\n我记得。刚才如果我答得像在核对资料，那是我不对。你不是一条记录，是我应该认出来的人。`);
+        addMessage("friend", `${knownName}。\n\n我记得你。刚才如果我答得像在核对资料，那是我不对。你问“我是谁”，我不该只回一个字段。`);
+      } else if (isCriticizingTone(text)) {
+        addMessage("friend", makeToneRepairReply());
       } else if (knownMemoryAnswer) {
         addMessage("friend", knownMemoryAnswer);
       } else {
