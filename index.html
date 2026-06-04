@@ -175,6 +175,7 @@
                 <span>小暖只会记下你点头允许的事。为了回复你，当前对话会交给 AI 处理；但普通聊天不会默认变成账号记忆。</span>
                 <button class="text-button" id="memory-login-button" type="button">去登录</button>
               </div>
+              <div class="relationship-note" id="relationship-note"></div>
               <p class="privacy-whisper">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
 
               <div class="conversation-stage">
@@ -199,7 +200,7 @@
                   <p id="memory-text">这件事要不要让我以后记得？</p>
                 </div>
                 <div class="memory-actions">
-                  <button class="primary-button" id="remember-yes" type="button">记住</button>
+                  <button class="primary-button" id="remember-yes" type="button">同意记住</button>
                   <button class="ghost-button" id="remember-session" type="button">只这次用</button>
                   <button class="ghost-button" id="remember-no" type="button">不要记</button>
                 </div>
@@ -374,6 +375,8 @@
                 <section class="diary-page diary-left-page">
                   <p class="eyebrow">目录和便签</p>
                   <div class="diary-memory-block">
+                    <p class="eyebrow">待你决定的记忆</p>
+                    <div class="memory-inbox" id="memory-inbox"></div>
                     <p class="eyebrow">小暖夹在本子里的便签</p>
                     <div class="record-list" id="memory-list"></div>
                   </div>

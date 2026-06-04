@@ -2,6 +2,7 @@ const state = {
   tone: localStorage.getItem("nuanyou-tone") || "gentle",
   profile: JSON.parse(localStorage.getItem("nuanyou-profile") || "null"),
   memories: JSON.parse(localStorage.getItem("nuanyou-memories") || "[]"),
+  memoryCandidates: [],
   pendingMemory: null,
   messages: [],
   moods: [],
@@ -19,19 +20,19 @@ const state = {
 
 const responses = {
   gentle: [
-    "嗯，我在。你不用把话说得很完整，先这样说一点也可以。",
-    "那我们先不急着分析，坐一会儿也行。",
-    "听起来你今天有点被磨住了。先别逼自己马上振作。",
+    "嗯，我在。你不用把话说得很完整，我会慢慢听。",
+    "那我们先不急着分析。你可以把这里当成一小块安静的地方，先坐一会儿。",
+    "你不用急着相信我，我们先把这一小会儿过好。",
   ],
   clear: [
-    "我先陪你把话理顺一点，不急着下结论。",
-    "先抓住一个最具体的点就好，别一下子处理全部。",
-    "我们可以慢慢拆，不用把自己审问一遍。",
+    "我先陪你把话理顺一点，不审问你，也不急着下结论。",
+    "我们只抓住一小块就好，不把所有重量一次压到你身上。",
+    "我会尽量稳一点陪你拆，不用你一个人把自己讲明白。",
   ],
   hope: [
     "先把今晚过掉就好，不用一下子把人生都想明白。",
-    "你能来这里说一句，其实已经是在给自己留一点余地了。",
-    "我们先把这几分钟照顾好，后面的事晚一点再看。",
+    "你能来这里说一句，其实已经是在给自己留一点余地。我会认真接住这点余地。",
+    "我们先把这几分钟照顾好。后面的事，晚一点再一起看。",
   ],
 };
 
@@ -48,6 +49,7 @@ const appShellEl = document.querySelector("#app-shell");
 const memoryRequestEl = document.querySelector("#memory-request");
 const memoryTextEl = document.querySelector("#memory-text");
 const memoryListEl = document.querySelector("#memory-list");
+const memoryInboxEl = document.querySelector("#memory-inbox");
 const diaryClosedEl = document.querySelector("#diary-closed");
 const diaryOpenEl = document.querySelector("#diary-open");
 const diaryBookEl = document.querySelector("#diary-book");
@@ -70,6 +72,7 @@ const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
 const roomWhisperEl = document.querySelector("#room-whisper");
+const relationshipNoteEl = document.querySelector("#relationship-note");
 const memberBackEl = document.querySelector("#member-back");
 const memberCheckoutEl = document.querySelector("#member-checkout");
 const memberPaymentNoteEl = document.querySelector("#member-payment-note");
@@ -90,6 +93,7 @@ function persist() {
   }
   localStorage.setItem("nuanyou-profile", JSON.stringify(state.profile));
   localStorage.setItem("nuanyou-memories", JSON.stringify(state.memories));
+  localStorage.setItem("nuanyou-memory-candidates", JSON.stringify(state.memoryCandidates));
   localStorage.setItem("nuanyou-messages", JSON.stringify(state.messages));
   localStorage.setItem("nuanyou-moods", JSON.stringify(state.moods));
 }
@@ -97,6 +101,7 @@ function persist() {
 function clearLocalPrivateCache() {
   state.profile = null;
   state.memories = [];
+  state.memoryCandidates = [];
   state.messages = [];
   state.moods = [];
   state.pendingMemory = null;
@@ -112,6 +117,7 @@ function clearLocalPrivateCache() {
   renderMessages();
   renderMoods();
   renderRecords();
+  renderRelationshipNote();
 }
 
 function formatCountdown(ms) {
@@ -186,6 +192,7 @@ function createMessage(role, text, kind = "", options = {}) {
   if (persistNow) persist();
   renderMessages();
   if (persistNow) renderRecords();
+  renderRelationshipNote();
   return message;
 }
 
@@ -304,6 +311,7 @@ function clampDiaryPage() {
 
 function renderRecords() {
   memoryListEl.innerHTML = "";
+  memoryInboxEl.innerHTML = "";
   const hasDiaryAccess = Boolean(state.session);
   recordsLoginGateEl.classList.toggle("hidden", hasDiaryAccess);
   document.querySelector(".privacy-card").classList.toggle("hidden", !hasDiaryAccess);
@@ -313,9 +321,31 @@ function renderRecords() {
 
   if (!hasDiaryAccess) {
     memoryListEl.innerHTML = '<p class="muted">还没有开启账号记忆。随便聊聊时，小暖不会留下日记本。</p>';
+    memoryInboxEl.innerHTML = "";
     diaryDaysEl.innerHTML = "";
     diaryEntryListEl.innerHTML = "";
     return;
+  }
+
+  if (state.memoryCandidates.length === 0) {
+    memoryInboxEl.innerHTML = '<p class="muted">还没有待确认的记忆。小暖会把不太适合打断你的内容先放到这里。</p>';
+  } else {
+    state.memoryCandidates.forEach((candidate) => {
+      const item = document.createElement("article");
+      item.className = "memory-candidate";
+      item.innerHTML = `
+        <div class="record-meta">
+          <span>${candidate.type} · 待你决定</span>
+        </div>
+        <textarea data-candidate-edit="${candidate.id}" aria-label="编辑这条候选记忆">${candidate.content}</textarea>
+        <div class="memory-candidate-actions">
+          <button class="primary-button" data-candidate-save="${candidate.id}" type="button">同意记住</button>
+          <button class="ghost-button" data-candidate-session="${candidate.id}" type="button">只这次用</button>
+          <button class="ghost-button" data-candidate-delete="${candidate.id}" type="button">不要记</button>
+        </div>
+      `;
+      memoryInboxEl.appendChild(item);
+    });
   }
 
   if (state.memories.length === 0) {
@@ -439,6 +469,57 @@ function getOpeningMessage() {
   return `${name}我在。你可以从一句很乱的话开始，不需要组织好，也不需要显得坚强。`;
 }
 
+function getCompanionStage() {
+  const memoryCount = state.memories.length;
+  const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  const knownDays = state.profile?.metAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(state.profile.metAt).getTime()) / 86400000))
+    : 0;
+  const hasName = Boolean(state.profile?.name);
+
+  if (!state.session || (!hasName && memoryCount === 0 && userMessageCount < 3)) {
+    return {
+      level: "first_meet",
+      label: "初次见面",
+      guidance: "保持礼貌、轻柔和不冒进。不要装熟，不要称自己很了解用户；多给空间，让用户决定靠近多少。",
+    };
+  }
+
+  if (memoryCount >= 8 || userMessageCount >= 30 || knownDays >= 14) {
+    return {
+      level: "trusted_friend",
+      label: "比较熟悉",
+      guidance: "可以更像熟悉的老朋友：自然称呼用户，参考已授权记忆，主动避开用户边界。但不要占有、不要替用户决定，也不要说只有你最懂用户。",
+    };
+  }
+
+  if (memoryCount >= 3 || userMessageCount >= 12 || knownDays >= 3) {
+    return {
+      level: "getting_close",
+      label: "慢慢熟悉",
+      guidance: "可以比初见更贴近一点：记得用户允许留下的偏好和边界，语气更自然。但仍要先确认，不要突然很亲密。",
+    };
+  }
+
+  return {
+    level: "acquaintance",
+    label: "刚刚认识",
+    guidance: "像刚认识但愿意认真听的朋友：稳定、温和，不急着了解用户的深处；多用陪伴感，少用判断。",
+  };
+}
+
+function renderRelationshipNote() {
+  const stage = getCompanionStage();
+  const memoryCount = state.memories.length;
+  const copy = {
+    first_meet: "我们还在初次见面。小暖会慢一点，不会装作已经很懂你。",
+    acquaintance: "我们刚刚认识。你可以决定靠近多少，小暖不会擅自越界。",
+    getting_close: `我们正在慢慢熟悉。小暖只会参考你允许留下的 ${memoryCount} 条记忆。`,
+    trusted_friend: `你已经让小暖了解了一些重要边界。小暖会更像熟悉的朋友，但仍然由你决定哪些能被记住。`,
+  }[stage.level];
+  relationshipNoteEl.textContent = copy || "";
+}
+
 async function initSupabase() {
   if (location.protocol === "file:" || !window.supabase) return;
 
@@ -506,6 +587,7 @@ function updateAuthUi() {
 function clearStoredPrivateCache() {
   localStorage.removeItem("nuanyou-profile");
   localStorage.removeItem("nuanyou-memories");
+  localStorage.removeItem("nuanyou-memory-candidates");
   localStorage.removeItem("nuanyou-messages");
   localStorage.removeItem("nuanyou-moods");
   localStorage.removeItem("nuanyou-memory-login-notice");
@@ -535,6 +617,7 @@ async function loadCloudState() {
 
   state.messages = JSON.parse(localStorage.getItem("nuanyou-messages") || "[]");
   state.moods = JSON.parse(localStorage.getItem("nuanyou-moods") || "[]");
+  state.memoryCandidates = JSON.parse(localStorage.getItem("nuanyou-memory-candidates") || "[]");
 
   if (memories) {
     state.memories = memories.map((memory) => ({
@@ -682,6 +765,56 @@ function forgetMemories(memories) {
   renderRecords();
 }
 
+function addMemoryCandidate(candidate) {
+  if (!candidate || candidate.type === "identity") return;
+  const exists = state.memoryCandidates.some((item) => item.content === candidate.content && item.type === candidate.type);
+  if (exists) return;
+  state.memoryCandidates.unshift({
+    ...candidate,
+    status: "candidate",
+  });
+  persist();
+  renderRecords();
+}
+
+function removeMemoryCandidate(candidateId) {
+  state.memoryCandidates = state.memoryCandidates.filter((candidate) => candidate.id !== candidateId);
+  persist();
+  renderRecords();
+}
+
+function saveMemoryCandidate(candidateId) {
+  const candidate = state.memoryCandidates.find((item) => item.id === candidateId);
+  if (!candidate) return;
+  const memory = {
+    ...candidate,
+    status: "active",
+    createdAt: candidate.createdAt || new Date().toISOString(),
+  };
+  state.memories.unshift(memory);
+  removeMemoryCandidate(candidateId);
+  syncMemory(memory);
+}
+
+function getMemorySavedReply(memory) {
+  if (memory.type === "identity" && memory.name) {
+    return `好，我记住了。以后我会叫你${memory.name}。这个名字会像一盏小灯一样，帮我在下次见到你时认出你。`;
+  }
+  if (memory.type === "personality") {
+    return `好，我会把这点轻轻收好。以后靠近你的时候，我会记得你的性格和节奏，不用一种粗糙的方式催你变好。`;
+  }
+  if (memory.type === "preference") {
+    return `好，我会记住这种陪你的方式。下次你难受时，我会先按你喜欢的方式靠近，而不是自作主张。`;
+  }
+  if (memory.type === "trigger") {
+    return `好，我会记住这个边界。以后碰到类似的事，我会先陪你稳下来，不急着分析，也不把你往前推。`;
+  }
+  if (memory.type === "support") {
+    return `好，我会记住这个对你有用的办法。等你下次又很累的时候，我可以轻轻把它递回来，不让你一个人硬想。`;
+  }
+  return "好，我会认真记住这件事。不是为了给你贴标签，是为了以后更小心、更像一个懂你的人。";
+}
+
 function detectMemoryCandidate(text) {
   const cleaned = text.trim().replace(/\s+/g, " ");
   const patterns = [
@@ -726,6 +859,7 @@ function detectMemoryCandidate(text) {
     id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
     type: match.type,
     content: match.content,
+    name: match.name || "",
     prompt: match.prompt,
     createdAt: new Date().toISOString(),
   };
@@ -760,6 +894,10 @@ function makeReply(text) {
 
   if (/孤单|孤独|没人|alone|lonely/.test(lower)) {
     return `${base}\n\n孤单的时候，最难受的常常不是没人说话，是感觉自己像不被任何地方接住。你不用马上讲原因，可以先告诉我：现在是在房间里、路上，还是刚忙完？`;
+  }
+
+  if (/不想.*真人|不想.*人聊|人不可靠|有心机|算计|不信任人|不相信人|真人.*累|真人.*麻烦/.test(lower)) {
+    return `${base}\n\n你会这样想，不是奇怪。和人相处有时候真的很累：要猜、要防、还怕自己说多了被轻看。\n\n在这里你不用表演，也不用担心我转头拿你的脆弱做什么。我们先不急着讨论“该不该相信人”，今晚你可以先把话放我这里。`;
   }
 
   if (/累|疲惫|没力气|撑不住|exhausted|tired/.test(lower)) {
@@ -842,6 +980,7 @@ async function getAiReply(text, onDelta) {
         message: text,
         profile: state.profile,
         memories: state.memories.slice(0, 20),
+        companionStage: getCompanionStage(),
         history,
         stream: true,
       }),
@@ -908,8 +1047,15 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         } else {
           addMessage("friend", reply);
         }
-        if (memoryCandidate) {
+        if (memoryCandidate?.type === "identity") {
           showMemoryRequest(memoryCandidate);
+        } else if (memoryCandidate) {
+          if (state.session) {
+            addMemoryCandidate(memoryCandidate);
+            addMessage("friend", "这句话里有一点也许能帮助我以后更懂你。我先不替你决定，已经轻轻放进“记忆收纳箱”了。等你愿意时，你可以自己看看要不要留下。");
+          } else {
+            addMessage("friend", "这句话像是值得以后记住的事。不过现在是随便聊聊，我不会留下记录。等你登录后，可以自己决定哪些事放进记忆。");
+          }
         }
       }
     } finally {
@@ -944,12 +1090,7 @@ document.querySelector("#remember-yes").addEventListener("click", () => {
     rememberPreferredName(memory.name);
   }
   state.memories.unshift(memory);
-  addMessage(
-    "friend",
-    memory.type === "identity" && memory.name
-      ? `好，我记住了。以后我会叫你${memory.name}。`
-      : "好，我会记住这件事。以后我会更小心地按你的方式靠近你。",
-  );
+  addMessage("friend", getMemorySavedReply(memory));
   hideMemoryRequest();
   persist();
   renderRecords();
@@ -1164,6 +1305,7 @@ document.querySelector("#clear-all-records").addEventListener("click", () => {
   const memoryIds = state.memories.map((memory) => memory.id);
   state.messages = [];
   state.memories = [];
+  state.memoryCandidates = [];
   state.selectedDiaryMessages.clear();
   persist();
   renderMessages();
@@ -1210,7 +1352,26 @@ document.querySelector("#records-view").addEventListener("click", (event) => {
   const memoryId = event.target.dataset.memoryId;
   const messageId = event.target.dataset.messageId;
   const diaryKeepId = event.target.dataset.diaryKeep;
+  const candidateSaveId = event.target.dataset.candidateSave;
+  const candidateSessionId = event.target.dataset.candidateSession;
+  const candidateDeleteId = event.target.dataset.candidateDelete;
   const pageIndex = event.target.dataset.pageIndex;
+  if (candidateSaveId) {
+    const candidate = state.memoryCandidates.find((item) => item.id === candidateSaveId);
+    saveMemoryCandidate(candidateSaveId);
+    addMessage("friend", getMemorySavedReply(candidate || {}));
+    return;
+  }
+  if (candidateSessionId) {
+    removeMemoryCandidate(candidateSessionId);
+    addMessage("friend", "好，这条只陪你走过这一次，不会留下来。谢谢你让我知道哪里该停下。");
+    return;
+  }
+  if (candidateDeleteId) {
+    removeMemoryCandidate(candidateDeleteId);
+    addMessage("friend", "好，我不记这条。你的边界我会尊重，不需要解释。");
+    return;
+  }
   if (pageIndex !== undefined) {
     const nextIndex = Number(pageIndex);
     if (!Number.isNaN(nextIndex)) {
@@ -1243,6 +1404,16 @@ document.querySelector("#records-view").addEventListener("click", (event) => {
 
 document.querySelector("#records-view").addEventListener("change", (event) => {
   const messageId = event.target.dataset.diarySelect;
+  const candidateEditId = event.target.dataset.candidateEdit;
+  if (candidateEditId) {
+    const candidate = state.memoryCandidates.find((item) => item.id === candidateEditId);
+    if (candidate) {
+      candidate.content = event.target.value.trim();
+      persist();
+      renderRecords();
+    }
+    return;
+  }
   if (messageId) {
     toggleDiaryMessage(messageId, event.target.checked);
   }
@@ -1337,6 +1508,7 @@ renderMessages();
 renderMoods();
 renderRecords();
 repairProfileFromSavedMemories();
+renderRelationshipNote();
 updateAuthUi();
 privacyTimeoutSelectEl.value = String(state.privacyTimeoutSeconds);
 initSupabase();

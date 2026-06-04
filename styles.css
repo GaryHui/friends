@@ -768,6 +768,17 @@ h4 {
   line-height: 1.5;
 }
 
+.relationship-note {
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  color: rgba(87, 117, 104, 0.92);
+  background: rgba(248, 252, 245, 0.7);
+  border: 1px solid rgba(87, 117, 104, 0.14);
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .privacy-timer {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
@@ -1451,6 +1462,45 @@ select:focus {
 
 .diary-memory-block {
   margin-top: 16px;
+}
+
+.memory-inbox {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.memory-candidate {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(248, 252, 245, 0.82);
+  border: 1px solid rgba(87, 117, 104, 0.18);
+  border-radius: 14px;
+}
+
+.memory-candidate textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  color: var(--ink);
+  background: rgba(255, 253, 248, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  line-height: 1.6;
+}
+
+.memory-candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-candidate-actions .primary-button,
+.memory-candidate-actions .ghost-button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
 }
 
 .diary-page-heading {
