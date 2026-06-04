@@ -17,19 +17,19 @@ const state = {
 
 const responses = {
   gentle: [
-    "我听见了。你现在不是在小题大做，而是在承受一件真的让你很累的事。",
-    "先不用急着变好。我们就把这一刻放在桌面上，看清它一点点。",
-    "你已经撑了很久。能把这句话说出来，本身就是在给自己留一盏灯。",
+    "嗯，我在。你不用把话说得很完整，先这样说一点也可以。",
+    "那我们先不急着分析，坐一会儿也行。",
+    "听起来你今天有点被磨住了。先别逼自己马上振作。",
   ],
   clear: [
-    "我们先把它拆开：事实是什么，你的感受是什么，你最需要被帮到的地方是什么？",
-    "这件事现在很重，但它不等于你整个人生。先找一个今天能做的小动作。",
-    "如果脑子里全是糟糕结论，先暂停评判，只记录此刻发生了什么。",
+    "我先陪你把话理顺一点，不急着下结论。",
+    "先抓住一个最具体的点就好，别一下子处理全部。",
+    "我们可以慢慢拆，不用把自己审问一遍。",
   ],
   hope: [
-    "你没有被这一刻定义。哪怕只是往前挪一点点，也算数。",
-    "我愿意陪你把今天过完。先从一杯水、一次深呼吸、一次求助开始。",
-    "现在很暗，但你正在寻找出口。这个动作很重要，也很勇敢。",
+    "先把今晚过掉就好，不用一下子把人生都想明白。",
+    "你能来这里说一句，其实已经是在给自己留一点余地了。",
+    "我们先把这几分钟照顾好，后面的事晚一点再看。",
   ],
 };
 
@@ -561,18 +561,18 @@ function makeReply(text) {
   }
 
   if (/孤单|孤独|没人|alone|lonely/.test(lower)) {
-    return `${base}\n\n孤独最折磨人的地方，是它会让你误以为“没有人会在乎”。此刻先让我陪你说下去：这种孤独最近是从什么时候变重的？`;
+    return `${base}\n\n孤单的时候，最难受的常常不是没人说话，是感觉自己像不被任何地方接住。你不用马上讲原因，可以先告诉我：现在是在房间里、路上，还是刚忙完？`;
   }
 
   if (/累|疲惫|没力气|撑不住|exhausted|tired/.test(lower)) {
-    return `${base}\n\n我们先不要求你解决整个人生。现在可以只做一个低消耗动作：喝水、坐直一点、或者给一个可信任的人发一句“我今天不太好”。`;
+    return `${base}\n\n如果只是累，那就先别给自己安排大道理了。可以先喝口水，或者把手机放低一点，给眼睛和肩膀松一松。`;
   }
 
   if (/焦虑|害怕|恐惧|panic|anxious/.test(lower)) {
-    return `${base}\n\n试着告诉我：最让你害怕的画面是什么？如果它真的发生，你最需要谁或什么来帮你撑住？`;
+    return `${base}\n\n焦虑上来的时候，人会很想把所有坏结果都预演一遍。我们先停一下：你现在最想先放下哪一件事？`;
   }
 
-  return `${base}\n\n如果愿意，我们可以继续沿着这句话走：这件事里最刺痛你的部分是什么？`;
+  return `${base}\n\n你可以继续说，也可以只发几个词。我会跟着你的节奏来。`;
 }
 
 function showCrisisSupport() {
@@ -627,7 +627,7 @@ async function getAiReply(text, onDelta) {
     return makeReply(text);
   }
 
-  const history = state.messages.slice(-8).map((message) => ({
+  const history = state.messages.slice(0, -1).slice(-8).map((message) => ({
     role: message.role === "friend" ? "assistant" : "user",
     content: message.text,
   }));
@@ -867,7 +867,7 @@ function switchView(view) {
   document.querySelector(`#${view}-view`).classList.add("active");
   pageTitleEl.textContent =
     {
-      chat: "今天可以不用一个人硬撑",
+      chat: "别觉得自己孤单，总会有人愿意陪你聊聊",
       mood: "给今天一个温柔的收尾",
       comfort: "先让身体慢下来",
       records: "你可以决定哪些留下",
