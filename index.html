@@ -148,8 +148,21 @@
                 <button class="text-button" id="memory-login-button" type="button">去登录</button>
               </div>
 
-              <div class="messages" id="messages" aria-live="polite"></div>
-              <div class="thinking hidden" id="thinking" aria-live="polite">小暖正在认真读你说的话...</div>
+              <div class="conversation-stage">
+                <div class="companion-room" aria-label="小暖的房间">
+                  <img src="assets/companion.png" alt="坐在温暖房间里的小暖" />
+                  <div class="room-glow" aria-hidden="true"></div>
+                  <div class="room-caption">
+                    <span>小暖在这里</span>
+                    <p id="room-whisper">我们可以慢慢说，不用一次讲清楚。</p>
+                  </div>
+                </div>
+
+                <div class="conversation-panel">
+                  <div class="messages" id="messages" aria-live="polite" aria-label="对话回看"></div>
+                  <div class="thinking hidden" id="thinking" aria-live="polite">小暖正在认真读你说的话...</div>
+                </div>
+              </div>
 
               <div class="memory-request hidden" id="memory-request" aria-live="polite">
                 <div>

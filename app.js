@@ -51,6 +51,7 @@ const authStatusEl = document.querySelector("#auth-status");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
+const roomWhisperEl = document.querySelector("#room-whisper");
 
 function persist() {
   localStorage.setItem("nuanyou-tone", state.tone);
@@ -112,6 +113,10 @@ function renderMessages() {
     bubble.textContent = message.text;
     messagesEl.appendChild(bubble);
   });
+  const latestFriendMessage = [...state.messages].reverse().find((message) => message.role === "friend" && message.text);
+  roomWhisperEl.textContent = latestFriendMessage
+    ? latestFriendMessage.text.replace(/\s+/g, " ").slice(0, 86)
+    : "我们可以慢慢说，不用一次讲清楚。";
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -201,6 +206,7 @@ async function initSupabase() {
     state.session = data.session;
     updateAuthUi();
     if (state.session) {
+      await syncLocalStateRemote();
       await loadCloudState();
     }
 
@@ -208,11 +214,13 @@ async function initSupabase() {
       state.session = session;
       updateAuthUi();
       if (session) {
+        await syncLocalStateRemote();
         await loadCloudState();
       }
     });
   } catch {
     state.supabase = null;
+    updateAuthUi();
   }
 }
 
@@ -223,6 +231,7 @@ function updateAuthUi() {
     memoryLoginNoteEl.classList.remove("hidden");
     return;
   }
+  authToggleEl.disabled = false;
   authToggleEl.textContent = state.session ? "退出" : "登录";
   authStatusEl.textContent = state.session ? "已登录，记录会同步到你的账号。" : "";
   memoryLoginNoteEl.classList.toggle("hidden", Boolean(state.session));
@@ -291,6 +300,15 @@ async function saveProfileRemote() {
     companion_tone: state.tone,
     updated_at: new Date().toISOString(),
   });
+}
+
+async function syncLocalStateRemote() {
+  if (!state.supabase || !state.session) return;
+  await saveProfileRemote();
+  await Promise.all([
+    ...state.messages.filter((message) => message.text).map((message) => syncMessage(message)),
+    ...state.memories.filter((memory) => memory.status !== "deleted").map((memory) => syncMemory(memory)),
+  ]);
 }
 
 async function syncMessage(message) {
@@ -683,13 +701,23 @@ authFormEl.addEventListener("submit", async (event) => {
   const { error } = await state.supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: location.origin,
+      emailRedirectTo: `${location.origin}${location.pathname}`,
     },
   });
   authStatusEl.textContent = error ? `发送失败：${error.message}` : "登录链接已发送，请打开邮箱确认。";
 });
 
 window.addEventListener("hashchange", () => {
+  state.supabase?.auth.getSession().then(({ data }) => {
+    state.session = data.session;
+    updateAuthUi();
+    if (state.session) {
+      syncLocalStateRemote().then(() => loadCloudState());
+    }
+  });
+});
+
+window.addEventListener("focus", () => {
   state.supabase?.auth.getSession().then(({ data }) => {
     state.session = data.session;
     updateAuthUi();
