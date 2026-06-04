@@ -214,7 +214,77 @@ Client Secret
 
 ## 会员支付怎么实现
 
-建议先用 Stripe Checkout 做会员订阅。原因是它不需要你自己保存银行卡，也不需要自己做复杂的支付表单；网站只需要在后端创建一个 Checkout Session，然后把用户跳转到 Stripe 托管的安全支付页。
+建议第一版先用 Stripe Checkout 做会员订阅。原因是它不需要你自己保存银行卡，也不需要自己做复杂的支付表单；网站只需要在后端创建一个 Checkout Session，然后把用户跳转到 Stripe 托管的安全支付页。
+
+注意：Stripe 是否能开通，取决于你的公司/个人主体所在地区。中国大陆主体通常不能直接注册 Stripe 收款账号。如果 Stripe 不适合，可以后续考虑 Paddle、Lemon Squeezy，或面向国内用户接支付宝/微信支付。
+
+### 会员适合卖什么
+
+不要把“孤独救赎”作为收费点。更适合把会员做成增强能力：
+
+```text
+更长记忆容量
+更多可编辑记忆卡
+睡前总结
+每周陪伴回顾
+更多小暖形象 / 语气
+语音陪伴
+本地加密日记
+更长上下文、更稳定的老朋友感
+```
+
+基础倾诉和安全支持应该尽量保留免费。会员是让长期使用的人获得更好的陪伴体验。
+
+### Stripe 后台要做什么
+
+1. 注册并完成 Stripe 账号验证。
+2. 创建产品：
+
+```text
+暖友会员
+```
+
+3. 创建订阅价格，例如：
+
+```text
+monthly plan: 19 CNY / month
+或
+monthly plan: 4.99 USD / month
+```
+
+4. 复制价格 ID：
+
+```text
+price_xxx
+```
+
+5. 复制 Secret Key：
+
+```text
+sk_live_xxx
+```
+
+6. 创建 webhook endpoint：
+
+```text
+https://friends4u.vercel.app/api/stripe-webhook
+```
+
+7. webhook 事件至少监听：
+
+```text
+checkout.session.completed
+customer.subscription.updated
+customer.subscription.deleted
+invoice.payment_succeeded
+invoice.payment_failed
+```
+
+8. 复制 webhook signing secret：
+
+```text
+whsec_xxx
+```
 
 基本流程：
 
@@ -237,6 +307,8 @@ POST /api/stripe-webhook
 7. webhook 校验成功后，把用户会员状态写进 Supabase，例如写入 `subscriptions` 表。
 8. 网站读取 Supabase 里的会员状态，解锁更长记忆、语音陪伴、睡前总结等能力。
 
+### Vercel 环境变量
+
 Vercel 需要增加的环境变量：
 
 ```text
@@ -247,6 +319,8 @@ APP_URL=https://friends4u.vercel.app
 ```
 
 前端绝对不要保存 `STRIPE_SECRET_KEY`。它只能放在 Vercel 环境变量里，并且只能在 `/api/*` 后端函数里使用。
+
+### Supabase 会员表
 
 支付接入前，建议先建一个 Supabase 表来保存会员状态：
 
@@ -270,6 +344,59 @@ using (auth.uid() = user_id);
 ```
 
 注意：插入和更新会员状态建议只允许后端 service role 做，不要让前端直接改。
+
+### 需要新增的后端接口
+
+第一版需要两个 Vercel API：
+
+```text
+POST /api/create-checkout-session
+POST /api/stripe-webhook
+```
+
+`/api/create-checkout-session` 负责：
+
+```text
+读取当前登录用户
+如果未登录，返回 401
+创建或复用 Stripe customer
+创建 Stripe Checkout Session
+把 user_id 放到 metadata 里
+返回 session.url 给前端跳转
+```
+
+`/api/stripe-webhook` 负责：
+
+```text
+读取 raw body
+用 STRIPE_WEBHOOK_SECRET 校验签名
+根据 checkout.session.completed / subscription updated / deleted 更新 subscriptions 表
+不要信任前端传来的会员状态
+```
+
+### 前端按钮逻辑
+
+会员按钮第一版逻辑：
+
+```text
+未登录 -> 打开登录面板
+已登录 -> POST /api/create-checkout-session
+拿到 url -> location.href = url
+支付成功 -> 回到 /?checkout=success
+支付取消 -> 回到 /?checkout=cancel
+```
+
+支付成功后不要只依赖 URL 参数展示会员状态；真正会员状态必须以 Supabase `subscriptions` 表为准。
+
+### 可选替代方案
+
+如果 Stripe 不适合你的主体：
+
+```text
+Paddle / Lemon Squeezy：适合海外 SaaS，Merchant of Record 会处理部分税务和付款问题。
+支付宝 / 微信支付：适合国内用户，但需要国内商户资质、备案、支付申请和回调验签。
+先手动开通：早期可以先用人工收款 + 后台手动写 subscriptions，验证用户是否愿意付费。
+```
 
 ## 如果 Google 登录跳到 localhost
 

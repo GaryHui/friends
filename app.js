@@ -17,6 +17,19 @@ const state = {
   memoryInboxPromptedCount: 0,
   privacyTimeoutSeconds: Number(localStorage.getItem("nuanyou-privacy-timeout") || "120"),
   privacyDeadline: Date.now() + Number(localStorage.getItem("nuanyou-privacy-timeout") || "120") * 1000,
+  authMode: "signup",
+  passwordRecovery: false,
+  proactiveMode: localStorage.getItem("nuanyou-proactive-mode") || (localStorage.getItem("nuanyou-proactive-disabled") === "1" ? "quiet" : "gentle"),
+  proactiveBoundaryAt: Number(localStorage.getItem("nuanyou-proactive-boundary-at") || "0"),
+  draftNudgeTimer: null,
+  lastDraftNudgeAt: 0,
+  lastDraftSignal: "",
+  inputActivity: {
+    previousLength: 0,
+    peakLength: 0,
+    lastChangedAt: 0,
+    deletedAfterStart: false,
+  },
 };
 
 const responses = {
@@ -72,6 +85,16 @@ const authCloseEl = document.querySelector("#auth-close");
 const authLogoutEl = document.querySelector("#auth-logout");
 const accountCardEl = document.querySelector("#account-card");
 const accountEmailEl = document.querySelector("#account-email");
+const authTitleEl = document.querySelector("#auth-title");
+const authSubtitleEl = document.querySelector("#auth-subtitle");
+const authPasswordEl = document.querySelector("#auth-password");
+const authSubmitEl = document.querySelector("#auth-submit");
+const authSocialEl = document.querySelector("#auth-social");
+const authSwitchEl = document.querySelector("#auth-switch");
+const authSwitchCopyEl = document.querySelector("#auth-switch-copy");
+const authModeToggleEl = document.querySelector("#auth-mode-toggle");
+const authPasswordToggleEl = document.querySelector("#auth-password-toggle");
+const forgotPasswordEl = document.querySelector("#forgot-password");
 const thinkingEl = document.querySelector("#thinking");
 const memoryLoginNoteEl = document.querySelector("#memory-login-note");
 const memoryLoginButtonEl = document.querySelector("#memory-login-button");
@@ -202,6 +225,142 @@ function createMessage(role, text, kind = "", options = {}) {
 
 function addMessage(role, text, kind = "") {
   return createMessage(role, text, kind);
+}
+
+function cancelDraftNudge() {
+  if (state.draftNudgeTimer) {
+    window.clearTimeout(state.draftNudgeTimer);
+    state.draftNudgeTimer = null;
+  }
+}
+
+function setProactiveMode(mode, options = {}) {
+  state.proactiveMode = mode;
+  localStorage.setItem("nuanyou-proactive-mode", mode);
+  localStorage.removeItem("nuanyou-proactive-disabled");
+  if (options.boundary) {
+    state.proactiveBoundaryAt = Date.now();
+    localStorage.setItem("nuanyou-proactive-boundary-at", String(state.proactiveBoundaryAt));
+  }
+  cancelDraftNudge();
+}
+
+function isProactiveQuiet() {
+  if (state.proactiveMode !== "quiet") return false;
+  const boundaryAge = Date.now() - state.proactiveBoundaryAt;
+  const userMessageCount = state.messages.filter((message) => message.role === "user").length;
+  if (boundaryAge > 86400000 && userMessageCount >= 3) {
+    setProactiveMode("gentle");
+    return false;
+  }
+  return true;
+}
+
+function detectProactivePreference(text) {
+  if (/不要打扰|别打扰|先别说话|安静一点|不要主动|别主动|不用主动|别催我|不要催/.test(text)) {
+    return false;
+  }
+  if (/可以主动|你可以接话|可以提醒我|可以陪我接着说|你可以问我|可以打扰/.test(text)) {
+    return true;
+  }
+  return null;
+}
+
+function inferDraftSignal(draft, fallbackSignal) {
+  const text = draft.trim();
+  if (fallbackSignal === "deleted") return "deleted";
+  if (/不知道|说不清|算了|没事|不想说|说了也没用|没意思/.test(text)) return "stuck";
+  if (/烦|累|撑不住|难受|崩|麻木|孤单|孤独|委屈|想哭/.test(text)) return "heavy";
+  if (/怕|焦虑|慌|紧张|担心|不安/.test(text)) return "anxious";
+  if (/人|朋友|家人|同事|关系|讨厌|失望|心机|不可靠/.test(text)) return "relationship";
+  return fallbackSignal;
+}
+
+function makeDraftNudge(signal) {
+  if (signal === "deleted") {
+    return "刚才好像有句话到了嘴边，又被你收回去了。\n\n没关系，不想发出来也可以。我先不追问，就在这里陪你坐一会儿。";
+  }
+  if (signal === "stuck") {
+    return "这句好像有点难开口。\n\n那我们不急着把它说完整。你可以先发一个词，或者只告诉我：现在是想被听见，还是想先安静一下。";
+  }
+  if (signal === "heavy") {
+    return "我感觉这不是随手打出来的一句话。\n\n先别急着解释原因。你可以把最重的那一点放一点点出来，我会慢慢接，不会催你。";
+  }
+  if (signal === "anxious") {
+    return "如果这会儿心里有点慌，我们先不用往下逼自己。\n\n你可以先停一下，呼一口气。等那股紧绷松一点，再继续说也来得及。";
+  }
+  if (signal === "relationship") {
+    return "和人有关的话，常常会很难说清楚。\n\n你不用急着判断谁对谁错。可以先把那种不舒服放下来一点，我会先站在你这边听。";
+  }
+  if (state.proactiveMode === "close") {
+    return "我不确定现在接话会不会打扰你，但感觉你像是卡在门口了。\n\n你不用马上说清楚，我先在这儿。";
+  }
+  return "你可以慢慢写，不用急着发得很完整。\n\n如果这句话有点难说出口，也可以先只发一点点。剩下的，我们慢慢来。";
+}
+
+function shouldSkipNudge(signal) {
+  const now = Date.now();
+  const cooldown = signal === "deleted" ? 90000 : 180000;
+  return (
+    isProactiveQuiet() ||
+    thinkingEl.classList.contains("hidden") === false ||
+    now - state.lastDraftNudgeAt < 60000 ||
+    (state.lastDraftSignal === signal && now - state.lastDraftNudgeAt < cooldown)
+  );
+}
+
+function sendBehaviorNudge(signal, draft = "") {
+  const inferredSignal = inferDraftSignal(draft, signal);
+  if (shouldSkipNudge(inferredSignal)) return;
+  state.lastDraftNudgeAt = Date.now();
+  state.lastDraftSignal = inferredSignal;
+  addMessage("friend", makeDraftNudge(inferredSignal), "soft-nudge");
+}
+
+function resetInputActivity() {
+  state.inputActivity.previousLength = 0;
+  state.inputActivity.peakLength = 0;
+  state.inputActivity.lastChangedAt = 0;
+  state.inputActivity.deletedAfterStart = false;
+}
+
+function scheduleDraftNudge(signal = "pause") {
+  cancelDraftNudge();
+  if (isProactiveQuiet()) return;
+  const currentLength = inputEl.value.trim().length;
+  if (signal === "pause" && currentLength < 2) return;
+
+  state.draftNudgeTimer = window.setTimeout(() => {
+    const latestLength = inputEl.value.trim().length;
+    if (signal === "deleted" && latestLength === 0 && state.inputActivity.deletedAfterStart) {
+      sendBehaviorNudge("deleted");
+      return;
+    }
+    if (signal === "pause" && latestLength >= 2) {
+      sendBehaviorNudge("pause", inputEl.value);
+    }
+  }, signal === "deleted" ? 2200 : state.proactiveMode === "close" ? 12000 : 18000);
+}
+
+function handleInputActivity() {
+  const length = inputEl.value.trim().length;
+  const previousLength = state.inputActivity.previousLength;
+  state.inputActivity.previousLength = length;
+  state.inputActivity.peakLength = Math.max(state.inputActivity.peakLength, length);
+  state.inputActivity.lastChangedAt = Date.now();
+
+  if (length === 0 && state.inputActivity.peakLength >= 2 && previousLength > 0) {
+    state.inputActivity.deletedAfterStart = true;
+    scheduleDraftNudge("deleted");
+    return;
+  }
+
+  if (length > 0) {
+    state.inputActivity.deletedAfterStart = false;
+    scheduleDraftNudge("pause");
+  } else {
+    cancelDraftNudge();
+  }
 }
 
 function updateMessage(message, text, options = {}) {
@@ -550,11 +709,17 @@ async function initSupabase() {
 
     state.supabase.auth.onAuthStateChange(async (event, session) => {
       state.session = session;
+      if (event === "PASSWORD_RECOVERY") {
+        state.passwordRecovery = true;
+        authPanelEl.classList.remove("hidden");
+        authStatusEl.textContent = "你已经通过邮箱验证了。现在可以设置一个新密码。";
+      }
       if (event === "SIGNED_OUT") {
+        state.passwordRecovery = false;
         clearLocalPrivateCache();
       }
       updateAuthUi();
-      if (session) {
+      if (session && !state.passwordRecovery) {
         await syncLocalStateRemote();
         await loadCloudState();
       }
@@ -566,26 +731,48 @@ async function initSupabase() {
 }
 
 function updateAuthUi() {
+  const signedIn = Boolean(state.session);
   if (!state.supabase) {
-    authToggleEl.textContent = "本地";
-    authToggleEl.disabled = true;
+    authToggleEl.textContent = "登录";
+    authToggleEl.disabled = false;
+    authToggleEl.title = "部署并配置 Supabase 后，可以使用邮箱或 Google 登录";
     accountCardEl.classList.add("hidden");
-    googleLoginEl.classList.remove("hidden");
+    authSocialEl.classList.remove("hidden");
     authFormEl.classList.remove("hidden");
+    authSwitchEl.classList.remove("hidden");
+    authTitleEl.textContent = state.authMode === "signup" ? "Create Account" : "Sign In";
+    authSubtitleEl.textContent = "这里会成为你的私人账号入口。配置 Supabase 后，就能用邮箱或 Google 登录。";
+    authSubmitEl.textContent = state.authMode === "signup" ? "Create Free Account" : "Sign in";
+    authSwitchCopyEl.textContent = state.authMode === "signup" ? "Already have an account?" : "没有账号？";
+    authModeToggleEl.textContent = state.authMode === "signup" ? "Sign in" : "Create account";
+    authPasswordEl.autocomplete = state.authMode === "signup" ? "new-password" : "current-password";
+    forgotPasswordEl.classList.toggle("hidden", state.authMode !== "signin");
     memoryLoginNoteEl.classList.remove("hidden");
     return;
   }
   const email = state.session?.user?.email || "";
   const label = email ? email.split("@")[0].slice(0, 12) : "";
   authToggleEl.disabled = false;
-  authToggleEl.textContent = state.session ? label || "已登录" : "登录";
-  authToggleEl.title = state.session ? `已用 ${email || "当前账号"} 登录` : "登录后，小暖可以保存你授权留下的记忆";
+  authToggleEl.textContent = signedIn ? label || "已登录" : "登录";
+  authToggleEl.title = signedIn ? `已用 ${email || "当前账号"} 登录` : "登录后，小暖可以保存你授权留下的记忆";
   accountEmailEl.textContent = email || "当前账号";
-  accountCardEl.classList.toggle("hidden", !state.session);
-  googleLoginEl.classList.toggle("hidden", Boolean(state.session));
-  authFormEl.classList.toggle("hidden", Boolean(state.session));
-  authStatusEl.textContent = state.session ? "已登录。小暖只会把你允许记下的事同步到账号；普通聊天不会默认保存成账号记忆。" : "";
-  memoryLoginNoteEl.classList.toggle("hidden", Boolean(state.session));
+  accountCardEl.classList.toggle("hidden", !signedIn || state.passwordRecovery);
+  authFormEl.classList.toggle("hidden", signedIn && !state.passwordRecovery);
+  authSocialEl.classList.toggle("hidden", signedIn || state.passwordRecovery);
+  authSwitchEl.classList.toggle("hidden", signedIn || state.passwordRecovery);
+  authTitleEl.textContent = state.passwordRecovery ? "Reset Password" : signedIn ? "你的账号" : state.authMode === "signup" ? "Create Account" : "Sign In";
+  authSubtitleEl.textContent = signedIn
+    ? state.passwordRecovery
+      ? "输入一个新密码。改好以后，你就可以继续回到小暖这里。"
+      : "你可以在这里确认账号、设置自动退出，或离开时清除这台设备上的记录。"
+    : "登录后，小暖才会在下次认出你，并只保存你明确允许记下的事。";
+  authSubmitEl.textContent = state.passwordRecovery ? "Update Password" : state.authMode === "signup" ? "Create Free Account" : "Sign in";
+  authSwitchCopyEl.textContent = state.authMode === "signup" ? "Already have an account?" : "没有账号？";
+  authModeToggleEl.textContent = state.authMode === "signup" ? "Sign in" : "Create account";
+  authPasswordEl.autocomplete = state.passwordRecovery || state.authMode === "signup" ? "new-password" : "current-password";
+  forgotPasswordEl.classList.toggle("hidden", signedIn || state.passwordRecovery || state.authMode !== "signin");
+  authStatusEl.textContent = signedIn && !state.passwordRecovery ? "已登录。小暖只会把你允许记下的事同步到账号；普通聊天不会默认保存成账号记忆。" : "";
+  memoryLoginNoteEl.classList.toggle("hidden", signedIn);
 }
 
 function clearStoredPrivateCache() {
@@ -898,6 +1085,10 @@ function makeReply(text) {
   const lower = text.toLowerCase();
   const base = responses[state.tone][Math.floor(Math.random() * responses[state.tone].length)];
 
+  if (/不像.*真人|不像人|机器人|机器|无趣|无聊|问一句|答一句|没兴趣|模板|客服|冷冰冰/.test(lower)) {
+    return "你说得对，刚才那种回法太像“收到你的问题，然后给一段正确答案”了。\n\n如果我是小暖，我不该只是在旁边念安慰词。我应该真的接住你话里的东西，比如你现在不是想要一个标准回复，你是想要一个能陪你把话聊下去、不会敷衍你的人。\n\n那我从这里重新来：你刚才试着和我聊的时候，最让你失望的是哪一下？是我太客气、太短、太会讲道理，还是没有真的顺着你的话继续走？";
+  }
+
   if (/复盘|review|总结|发生了什么/.test(lower)) {
     return `${base}\n\n我们按复盘来走：\n1. 发生了什么：先只写事实，不急着评价自己。\n2. 你被影响的点：是委屈、害怕、羞耻，还是失望？\n3. 可以做的一步：今晚只选一个动作，比如发一条消息、洗个澡、早点睡，或者把明天第一件事写下来。\n\n你不需要一次想明白全部。能把今天放下去一点，就已经是在照顾自己了。`;
   }
@@ -926,7 +1117,7 @@ function makeReply(text) {
     return `${base}\n\n焦虑上来的时候，人会很想把所有坏结果都预演一遍。我们先停一下：你现在最想先放下哪一件事？`;
   }
 
-  return `${base}\n\n你可以继续说，也可以只发几个词。我会跟着你的节奏来。`;
+  return `${base}\n\n我先不急着把你分析明白。你刚才这句话里，我更想陪你多停一会儿。要是愿意，你可以顺着刚才那个感觉继续说；说乱一点也没关系。`;
 }
 
 function showCrisisSupport() {
@@ -1026,8 +1217,26 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   const text = inputEl.value.trim();
   if (!text) return;
 
+  cancelDraftNudge();
   addMessage("user", text);
   inputEl.value = "";
+  resetInputActivity();
+
+  const proactivePreference = detectProactivePreference(text);
+  if (proactivePreference === false) {
+    setProactiveMode("quiet", { boundary: true });
+    if (text.length <= 32) {
+      addMessage("friend", "好，我会安静一点。以后你不主动发出来，我就不在输入停顿时接话。");
+      return;
+    }
+  } else if (proactivePreference === true) {
+    setProactiveMode("gentle");
+    if (text.length <= 32) {
+      addMessage("friend", "好，那我会在你卡住的时候轻轻接一下，但不会催你。");
+      return;
+    }
+  }
+
   setThinking(true);
   if (shouldShowMemoryLoginNotice()) {
     showMemoryLoginNotice();
@@ -1082,7 +1291,13 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   }, 420);
 });
 
+inputEl.addEventListener("input", handleInputActivity);
+inputEl.addEventListener("focus", handleInputActivity);
+inputEl.addEventListener("blur", cancelDraftNudge);
+
 document.querySelector("#clear-chat").addEventListener("click", () => {
+  cancelDraftNudge();
+  resetInputActivity();
   state.messages = [];
   persist();
   renderMessages();
@@ -1131,6 +1346,7 @@ document.querySelectorAll(".prompt-list button, .soft-prompts button").forEach((
   button.addEventListener("click", () => {
     inputEl.value = button.dataset.prompt;
     inputEl.focus();
+    handleInputActivity();
   });
 });
 
@@ -1184,12 +1400,48 @@ document.querySelector("#reset-profile").addEventListener("click", () => {
 });
 
 authToggleEl.addEventListener("click", () => {
-  if (!state.supabase) return;
   authPanelEl.classList.toggle("hidden");
+  if (!state.supabase && !authPanelEl.classList.contains("hidden")) {
+    authStatusEl.textContent = "当前本地环境还没有连接 Supabase。线上配置好变量后，这里就可以注册、登录和使用 Google。";
+  }
 });
 
 authCloseEl.addEventListener("click", () => {
   authPanelEl.classList.add("hidden");
+});
+
+authModeToggleEl.addEventListener("click", () => {
+  state.authMode = state.authMode === "signup" ? "signin" : "signup";
+  state.passwordRecovery = false;
+  authStatusEl.textContent = "";
+  updateAuthUi();
+});
+
+authPasswordToggleEl.addEventListener("click", () => {
+  const isHidden = authPasswordEl.type === "password";
+  authPasswordEl.type = isHidden ? "text" : "password";
+  authPasswordToggleEl.textContent = isHidden ? "隐藏" : "显示";
+  authPasswordToggleEl.setAttribute("aria-label", isHidden ? "隐藏密码" : "显示密码");
+});
+
+forgotPasswordEl.addEventListener("click", async () => {
+  const email = document.querySelector("#auth-email").value.trim();
+  if (!email) {
+    authStatusEl.textContent = "先填一下邮箱，我才能把重置密码的链接发给你。";
+    document.querySelector("#auth-email").focus();
+    return;
+  }
+  if (!state.supabase) {
+    authStatusEl.textContent = "当前本地环境还没有连接 Supabase。线上配置好变量后，就可以发送重置密码邮件。";
+    return;
+  }
+  forgotPasswordEl.disabled = true;
+  authStatusEl.textContent = "正在发送重置密码邮件...";
+  const { error } = await state.supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${location.origin}${location.pathname}`,
+  });
+  forgotPasswordEl.disabled = false;
+  authStatusEl.textContent = error ? `发送失败：${error.message}` : "重置密码邮件已发送。打开邮箱里的链接后，就能设置新密码。";
 });
 
 authLogoutEl.addEventListener("click", async () => {
@@ -1208,7 +1460,7 @@ memoryLoginButtonEl.addEventListener("click", () => {
     return;
   }
   authPanelEl.classList.remove("hidden");
-  authStatusEl.textContent = "输入邮箱后，我会发一封登录链接。登录后，小暖只会同步你允许记下的事；普通聊天不会默认保存成账号记忆。";
+  authStatusEl.textContent = "你可以用邮箱建立账号，或直接用 Google 登录。登录后，小暖只会同步你允许记下的事。";
   document.querySelector("#auth-email").focus();
 });
 
@@ -1243,17 +1495,60 @@ googleLoginEl.addEventListener("click", async () => {
 
 authFormEl.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!state.supabase) return;
+  if (!state.supabase) {
+    authStatusEl.textContent = "当前本地环境还没有连接 Supabase。部署到 Vercel 并设置变量后，这里就能创建账号或登录。";
+    return;
+  }
   const email = document.querySelector("#auth-email").value.trim();
-  if (!email) return;
-  authStatusEl.textContent = "正在发送登录链接...";
-  const { error } = await state.supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${location.origin}${location.pathname}`,
-    },
-  });
-  authStatusEl.textContent = error ? `发送失败：${error.message}` : "登录链接已发送，请打开邮箱确认。";
+  const password = authPasswordEl.value;
+  if (!password || (!state.passwordRecovery && !email)) return;
+  if (password.length < 6) {
+    authStatusEl.textContent = "密码至少需要 6 个字符。";
+    return;
+  }
+
+  authSubmitEl.disabled = true;
+  authStatusEl.textContent = state.passwordRecovery ? "正在更新密码..." : state.authMode === "signup" ? "正在创建账号..." : "正在登录...";
+  const result =
+    state.passwordRecovery
+      ? await state.supabase.auth.updateUser({ password })
+      : state.authMode === "signup"
+      ? await state.supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${location.origin}${location.pathname}`,
+          },
+        })
+      : await state.supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+  authSubmitEl.disabled = false;
+  if (result.error) {
+    authStatusEl.textContent = `${state.passwordRecovery ? "更新失败" : state.authMode === "signup" ? "注册失败" : "登录失败"}：${result.error.message}`;
+    return;
+  }
+
+  if (state.passwordRecovery) {
+    state.passwordRecovery = false;
+    authStatusEl.textContent = "密码已经更新好了。你可以继续回到小暖这里。";
+    authPasswordEl.value = "";
+    updateAuthUi();
+    return;
+  }
+
+  if (state.authMode === "signup" && !result.data.session) {
+    authStatusEl.textContent = "账号已创建。请打开邮箱确认后再回来登录。";
+    return;
+  }
+
+  state.session = result.data.session;
+  authStatusEl.textContent = "登录成功。以后小暖只会记住你点头允许留下的事。";
+  authPasswordEl.value = "";
+  updateAuthUi();
+  syncLocalStateRemote().then(() => loadCloudState());
 });
 
 window.addEventListener("hashchange", () => {

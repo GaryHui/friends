@@ -72,36 +72,64 @@
           </div>
         </section>
 
-        <section class="auth-panel hidden" id="auth-panel" aria-label="登录">
-          <button class="panel-close" id="auth-close" type="button" aria-label="关闭登录面板">返回</button>
-          <div>
-            <p class="eyebrow">建立你的档案</p>
-            <p>如果你喜欢小暖的陪伴，可以用 Google 或邮箱登录。登录后，小暖才能在下次认出你，并保存你明确允许记下的事。普通聊天不会默认保存成账号记忆。</p>
+        <section class="auth-panel hidden" id="auth-panel" aria-label="账号">
+          <div class="auth-card">
+            <button class="panel-close" id="auth-close" type="button" aria-label="关闭账号面板">×</button>
+            <div class="auth-copy">
+              <p class="eyebrow">暖友账号</p>
+              <h3 id="auth-title">Create Account</h3>
+              <p id="auth-subtitle">登录后，小暖才会在下次认出你，并只保存你明确允许记下的事。</p>
+            </div>
+            <div class="account-card hidden" id="account-card">
+              <span>当前账号</span>
+              <strong id="account-email">还没有登录</strong>
+              <label class="privacy-timeout-setting">
+                自动退出
+                <select id="privacy-timeout-select">
+                  <option value="120">2 分钟</option>
+                  <option value="300">5 分钟</option>
+                  <option value="600">10 分钟</option>
+                  <option value="1800">30 分钟</option>
+                  <option value="0">关闭</option>
+                </select>
+              </label>
+              <button class="danger-button auth-danger-button" id="auth-logout" type="button">退出并清除本机记录</button>
+            </div>
+            <form class="auth-form" id="auth-form">
+              <label class="auth-field">
+                <span aria-hidden="true">✉</span>
+                <input id="auth-email" type="email" placeholder="E-mail" autocomplete="email" required />
+              </label>
+              <label class="auth-field">
+                <span aria-hidden="true">●</span>
+                <input id="auth-password" type="password" placeholder="Password" autocomplete="new-password" minlength="6" required />
+                <button class="password-toggle" id="auth-password-toggle" type="button" aria-label="显示密码">显示</button>
+              </label>
+              <p class="auth-help">Minimum 6 characters</p>
+              <button class="primary-button auth-submit" id="auth-submit" type="submit">Create Free Account</button>
+              <button class="forgot-password hidden" id="forgot-password" type="button">忘记密码？</button>
+            </form>
+            <div class="auth-social" id="auth-social">
+              <div class="auth-divider">
+                <span></span>
+                <strong>or continue with</strong>
+                <span></span>
+              </div>
+              <button class="google-button" id="google-login" type="button">
+                <span aria-hidden="true">G</span>
+                Google
+              </button>
+              <div class="social-grid">
+                <button class="social-button" type="button" disabled>Discord</button>
+                <button class="social-button" type="button" disabled>X</button>
+              </div>
+            </div>
+            <p class="auth-status" id="auth-status"></p>
+            <div class="auth-switch" id="auth-switch">
+              <span id="auth-switch-copy">Already have an account?</span>
+              <button id="auth-mode-toggle" type="button">Sign in</button>
+            </div>
           </div>
-          <div class="account-card hidden" id="account-card">
-            <span>当前账号</span>
-            <strong id="account-email">还没有登录</strong>
-            <label class="privacy-timeout-setting">
-              自动退出
-              <select id="privacy-timeout-select">
-                <option value="120">2 分钟</option>
-                <option value="300">5 分钟</option>
-                <option value="600">10 分钟</option>
-                <option value="1800">30 分钟</option>
-                <option value="0">关闭</option>
-              </select>
-            </label>
-            <button class="danger-button auth-danger-button" id="auth-logout" type="button">退出并清除本机记录</button>
-          </div>
-          <button class="google-button" id="google-login" type="button">
-            <span aria-hidden="true">G</span>
-            使用 Google 登录
-          </button>
-          <form id="auth-form">
-            <input id="auth-email" type="email" placeholder="输入邮箱，接收登录链接" required />
-            <button class="primary-button" type="submit">发送登录链接</button>
-          </form>
-          <p class="auth-status" id="auth-status"></p>
         </section>
 
         <section class="view active intro-view" id="intro-view" aria-labelledby="intro-heading">
