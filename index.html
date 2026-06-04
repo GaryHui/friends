@@ -136,20 +136,14 @@
           <div class="intro-card">
             <div class="intro-copy">
               <p class="eyebrow">小暖的自我介绍</p>
-              <h3 id="intro-heading">你好，我是小暖。你可以先在这里坐一会儿。</h3>
+              <h3 id="intro-heading">我在，慢慢说。</h3>
               <p>
-                不用急着把事情讲清楚，也不用表现得很坚强。我们可以先从名字开始，慢慢熟起来。
+                不用介绍完整的自己，也不用把话讲漂亮。先留一个称呼，我们就从这一小会儿开始。
               </p>
               <div class="trust-note">
-                <strong>关于记忆和隐私，我会提前说清楚。</strong>
+                <strong>记忆由你决定。</strong>
                 <span>
-                  为了回复你，当前对话会交给 AI 服务处理；但普通聊天不会默认保存成账号记忆。
-                </span>
-                <span>
-                  小暖只会记你点头允许的事，并尽量记成偏好、边界和陪伴方式，而不是保存原始倾诉。
-                </span>
-                <span>
-                  你可以回看、删除，也可以直接说“忘掉这件事”。小暖想长期记住什么，会先问你。
+                  普通聊天不会默认变成长期记忆；小暖想记住什么，会先问你。你也可以随时回看、删除，或者直接说“忘掉这件事”。
                 </span>
               </div>
               <form class="intro-form" id="intro-form">
@@ -214,8 +208,8 @@
                   <button data-companion-mode="romance" type="button">心动</button>
                 </div>
               </div>
-              <div class="relationship-note" id="relationship-note"></div>
-              <section class="bond-panel" id="bond-panel" aria-label="你和小暖的养成主线">
+              <div class="relationship-note hidden" id="relationship-note"></div>
+              <section class="bond-panel hidden" id="bond-panel" aria-label="你和小暖的养成主线">
                 <div class="bond-panel-head">
                   <div>
                     <span class="growth-kicker">养成主线</span>
@@ -274,7 +268,7 @@
                   </div>
                 </div>
               </section>
-              <p class="privacy-whisper">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
+              <p class="privacy-whisper hidden">只有你点“记住”的事才会进入账号记忆；其它聊天只缓存在当前设备本地，退出账号会清除本机私密缓存。</p>
 
               <div class="conversation-stage">
                 <div class="companion-room" aria-label="小暖的房间">
@@ -305,9 +299,9 @@
               </div>
 
               <div class="soft-prompts" aria-label="快速开始">
-                <button type="button" data-prompt="我今天最难受的一刻是：">最难受的一刻</button>
-                <button type="button" data-prompt="我想把今天发生的事慢慢复盘一下：">复盘今天</button>
-                <button type="button" data-prompt="请陪我做一个今晚能完成的小计划：">今晚小计划</button>
+                <button type="button" data-prompt="我现在有点不知道怎么开口。">不知道怎么说</button>
+                <button type="button" data-prompt="陪我像散步一样慢慢聊一会儿。">慢慢聊</button>
+                <button type="button" data-prompt="今晚睡前，陪我把心放轻一点。">睡前陪我</button>
               </div>
 
               <div class="privacy-timer" id="privacy-timer" aria-live="polite">
@@ -316,7 +310,7 @@
                 <p id="privacy-timer-copy">2 分钟没有操作，会自动退出并清空当前页面记录。</p>
               </div>
 
-              <div class="proactive-cue" id="proactive-cue" aria-live="polite">
+              <div class="proactive-cue hidden" id="proactive-cue" aria-live="polite">
                 <span id="proactive-cue-copy">小暖会在你卡住或沉默太久时轻轻接话。</span>
                 <button id="proactive-cue-toggle" type="button">安静一点</button>
               </div>

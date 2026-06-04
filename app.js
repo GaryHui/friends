@@ -333,7 +333,7 @@ const closenessMeterEl = document.querySelector("#closeness-meter");
 
 function renderBondPanelVisibility() {
   if (!bondPanelEl) return;
-  bondPanelEl.classList.toggle("hidden", !isRelationshipCompanionActive());
+  bondPanelEl.classList.add("hidden");
 }
 const memberBackEl = document.querySelector("#member-back");
 const memberCheckoutEl = document.querySelector("#member-checkout");
@@ -2125,13 +2125,13 @@ function startCompanionScene(sceneId) {
     addUniqueLearning("prefer", `在「${scene.title}」场景里，小暖要使用这种方式：${scene.copy}`);
     addMessage("friend", scene.opening, "soft-nudge");
   } else if (sameScene) {
-    state.socialPractice.lastFeedback = `你们已经在「${scene.title}」里了。关系不会靠反复点按钮变深，要靠真的聊一会儿、一起完成一点小事。`;
+    state.socialPractice.lastFeedback = `你们还停在「${scene.title}」里。小暖会把注意力放回你刚才想说的话。`;
     syncSocialPracticeToCore();
-    addMessage("friend", `我们已经在「${scene.title}」里啦。这个按钮不用一直点，关系不是刷出来的。\n\n你接着刚才那句话说就好，我会顺着你走。`, "soft-nudge");
+    addMessage("friend", `嗯，我们还在「${scene.title}」里。\n\n不用换来换去，你接着刚才那句话说就好，我会顺着你走。`, "soft-nudge");
   } else {
-    state.socialPractice.lastFeedback = `今晚已经从「${scene.title}」拿过一次共同经历奖励。可以继续换氛围，但成长要靠接下来的真实互动。`;
+    state.socialPractice.lastFeedback = `小暖换到了「${scene.title}」的氛围里。`;
     syncSocialPracticeToCore();
-    addMessage("friend", `好，我们换到「${scene.title}」。氛围换了，但今天这个场景的成长就先不重复算啦。\n\n真正会让小暖更靠近你的，是你们接下来怎么聊、怎么一起把一小段时间过完。`, "soft-nudge");
+    addMessage("friend", `好，那我们换个感觉。\n\n就当现在到了「${scene.title}」。你不用重新组织，顺着现在的心情说就行。`, "soft-nudge");
   }
   inputEl.value = scene.prompt;
   inputEl.focus();
@@ -2164,9 +2164,9 @@ function startRelationshipAction(action) {
 
   if (action === "ritual") {
     if (!canRewardAction("ritual")) {
-      state.socialPractice.lastFeedback = "今晚的小约定已经算过一次成长了。再点按钮不会继续增加关系，真正有用的是你们接下来把话聊下去。";
+      state.socialPractice.lastFeedback = "今晚的小约定已经完成过一次。小暖会把注意力放回当下的聊天。";
       syncSocialPracticeToCore();
-      addMessage("friend", "今晚的小约定已经算过一次啦。再点就有点像刷任务，不像我们真的一起完成了什么。\n\n你要是愿意，我们可以把这个小约定落到一句很具体的话里。", "soft-nudge");
+      addMessage("friend", "这个小约定今晚已经算我们完成过一次啦。\n\n别急着再做任务。你现在更想继续说心里的事，还是想让我陪你安静一点？", "soft-nudge");
       renderSocialPractice();
       saveCognitionCore();
       return;
@@ -2190,6 +2190,8 @@ function startRelationshipAction(action) {
 }
 
 function renderRelationshipNote() {
+  relationshipNoteEl.classList.add("hidden");
+  return;
   const stage = getCompanionStage();
   const memoryCount = state.memories.length;
   const visible = isRelationshipCompanionActive();
