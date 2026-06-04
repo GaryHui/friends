@@ -3100,7 +3100,7 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
         }
       } else if (isAskingKnownIdentity(text) && knownName) {
         rememberPreferredName(knownName);
-        addMessage("friend", `${knownName}。\n\n我记得你。刚才如果我答得像在核对资料，那是我不对。你问“我是谁”，我不该只回一个字段。`);
+        addMessage("friend", `${knownName}。\n\n我记得你。刚才如果我答得像在查资料，那是我不对。你不是来让我核对名字的，你是在看我有没有真的认出你。`);
       } else if (isCriticizingTone(text)) {
         addMessage("friend", makeToneRepairReply());
       } else if (knownMemoryAnswer) {
