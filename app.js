@@ -1,3 +1,6 @@
+const storedProactiveMode = localStorage.getItem("nuanyou-proactive-mode");
+const storedProactiveBoundaryAt = Number(localStorage.getItem("nuanyou-proactive-boundary-at") || "0");
+
 const state = {
   tone: localStorage.getItem("nuanyou-tone") || "gentle",
   profile: JSON.parse(localStorage.getItem("nuanyou-profile") || "null"),
@@ -19,8 +22,8 @@ const state = {
   privacyDeadline: Date.now() + Number(localStorage.getItem("nuanyou-privacy-timeout") || "120") * 1000,
   authMode: "signup",
   passwordRecovery: false,
-  proactiveMode: localStorage.getItem("nuanyou-proactive-mode") || (localStorage.getItem("nuanyou-proactive-disabled") === "1" ? "quiet" : "gentle"),
-  proactiveBoundaryAt: Number(localStorage.getItem("nuanyou-proactive-boundary-at") || "0"),
+  proactiveMode: storedProactiveMode === "quiet" && !storedProactiveBoundaryAt ? "gentle" : storedProactiveMode || "gentle",
+  proactiveBoundaryAt: storedProactiveBoundaryAt,
   draftNudgeTimer: null,
   lastDraftNudgeAt: 0,
   lastDraftSignal: "",
@@ -107,6 +110,9 @@ const privacyTimerEl = document.querySelector("#privacy-timer");
 const privacyCountdownEl = document.querySelector("#privacy-countdown");
 const privacyTimerCopyEl = document.querySelector("#privacy-timer-copy");
 const privacyTimeoutSelectEl = document.querySelector("#privacy-timeout-select");
+const proactiveCueEl = document.querySelector("#proactive-cue");
+const proactiveCueCopyEl = document.querySelector("#proactive-cue-copy");
+const proactiveCueToggleEl = document.querySelector("#proactive-cue-toggle");
 let privacyTimerId = null;
 
 function persist() {
@@ -243,17 +249,27 @@ function setProactiveMode(mode, options = {}) {
     localStorage.setItem("nuanyou-proactive-boundary-at", String(state.proactiveBoundaryAt));
   }
   cancelDraftNudge();
+  updateProactiveUi();
 }
 
 function isProactiveQuiet() {
   if (state.proactiveMode !== "quiet") return false;
   const boundaryAge = Date.now() - state.proactiveBoundaryAt;
   const userMessageCount = state.messages.filter((message) => message.role === "user").length;
-  if (boundaryAge > 86400000 && userMessageCount >= 3) {
+  if (!state.proactiveBoundaryAt || boundaryAge > 600000 || userMessageCount >= 2) {
     setProactiveMode("gentle");
     return false;
   }
   return true;
+}
+
+function updateProactiveUi() {
+  const quiet = state.proactiveMode === "quiet";
+  proactiveCueEl.classList.toggle("quiet", quiet);
+  proactiveCueCopyEl.textContent = quiet
+    ? "小暖现在会安静等你发出来。"
+    : "小暖会在你卡住时轻轻接话。";
+  proactiveCueToggleEl.textContent = quiet ? "恢复接话" : "安静一点";
 }
 
 function detectProactivePreference(text) {
@@ -339,7 +355,7 @@ function scheduleDraftNudge(signal = "pause") {
     if (signal === "pause" && latestLength >= 2) {
       sendBehaviorNudge("pause", inputEl.value);
     }
-  }, signal === "deleted" ? 2200 : state.proactiveMode === "close" ? 12000 : 18000);
+  }, signal === "deleted" ? 1800 : state.proactiveMode === "close" ? 8000 : 10000);
 }
 
 function handleInputActivity() {
@@ -1476,6 +1492,16 @@ privacyTimeoutSelectEl.addEventListener("change", () => {
   setPrivacyTimeout(Number(privacyTimeoutSelectEl.value));
 });
 
+proactiveCueToggleEl.addEventListener("click", () => {
+  if (state.proactiveMode === "quiet") {
+    setProactiveMode("gentle");
+    addMessage("friend", "好，我会回到轻轻接话的状态。你卡住的时候，我会试着靠近一点，但不催你。", "soft-nudge");
+    return;
+  }
+  setProactiveMode("quiet", { boundary: true });
+  addMessage("friend", "好，我先安静一点。你发出来以后，我再认真接住。", "soft-nudge");
+});
+
 googleLoginEl.addEventListener("click", async () => {
   if (!state.supabase) {
     authStatusEl.textContent = "当前环境还没有连上 Supabase 登录配置。请先用线上 Vercel 地址打开网站。";
@@ -1838,6 +1864,7 @@ renderRecords();
 repairProfileFromSavedMemories();
 renderRelationshipNote();
 updateAuthUi();
+updateProactiveUi();
 privacyTimeoutSelectEl.value = String(state.privacyTimeoutSeconds);
 initSupabase();
 startPrivacyTimer();

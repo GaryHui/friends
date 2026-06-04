@@ -1008,6 +1008,39 @@ h4 {
   color: #8a4037;
 }
 
+.proactive-cue {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin: -2px 0 10px;
+  padding: 8px 11px;
+  color: rgba(87, 117, 104, 0.9);
+  background: rgba(231, 240, 234, 0.64);
+  border: 1px solid rgba(87, 117, 104, 0.16);
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.proactive-cue.quiet {
+  color: rgba(94, 69, 52, 0.78);
+  background: rgba(255, 255, 255, 0.48);
+  border-color: rgba(127, 95, 70, 0.14);
+}
+
+.proactive-cue button {
+  flex: 0 0 auto;
+  padding: 0;
+  color: rgba(94, 69, 52, 0.76);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .thinking {
   margin: 0 0 10px 4px;
   color: rgba(117, 111, 104, 0.86);
@@ -2073,6 +2106,16 @@ select:focus {
   .privacy-card {
     grid-template-columns: 1fr;
     padding: 14px;
+  }
+
+  .proactive-cue {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .proactive-cue button {
+    align-self: flex-end;
   }
 
   .memory-request {
