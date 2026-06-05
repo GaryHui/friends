@@ -11,6 +11,24 @@ function sendStreamEvent(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+async function requestQwen({ apiKey, messages, temperature = 0.88, maxTokens = 240, stream = false }) {
+  return fetch(`${BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature,
+      presence_penalty: 0.25,
+      max_tokens: maxTokens,
+      stream,
+    }),
+  });
+}
+
 function sendTextStream(res, text) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -20,48 +38,6 @@ function sendTextStream(res, text) {
   sendStreamEvent(res, { delta: text });
   res.write("data: [DONE]\n\n");
   res.end();
-}
-
-async function streamQwenToClient(upstream, res) {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive",
-  });
-
-  const reader = upstream.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split("\n\n");
-      buffer = events.pop() || "";
-
-      for (const event of events) {
-        const lines = event.split("\n").filter((line) => line.startsWith("data:"));
-        for (const line of lines) {
-          const payload = line.replace(/^data:\s*/, "").trim();
-          if (!payload) continue;
-          if (payload === "[DONE]") {
-            res.write("data: [DONE]\n\n");
-            continue;
-          }
-          const data = JSON.parse(payload);
-          const delta = data?.choices?.[0]?.delta?.content || "";
-          if (delta) sendStreamEvent(res, { delta });
-        }
-      }
-    }
-    res.write("data: [DONE]\n\n");
-  } catch (error) {
-    sendStreamEvent(res, { error: error.message || "Stream failed" });
-  } finally {
-    res.end();
-  }
 }
 
 function extractPreferredName(text = "") {
@@ -118,6 +94,66 @@ function makeIdentityReply(name = "") {
     return "嗯，这次是我没接住，不该让你有那种“我明明说过了”的落空感。\n\n我现在这边还没有稳稳认出你的名字。你只要再丢给我一个名字就好，我会先在这次聊天里认住；要不要长期留下，再由你点头。";
   }
   return `${name}。\n\n我记得你。这不是一句标准答案，是我应该认出来的人。`;
+}
+
+function getHumanReviewFlags(reply = "", userMessage = "") {
+  const text = String(reply).trim();
+  const flags = [];
+  if (!text) return ["empty"];
+  const roboticPatterns = [
+    /作为(AI|一个AI|人工智能|语言模型)/,
+    /我理解你的感受|这一定很不容易|从你的描述来看|建议你|你可以尝试/,
+    /首先|其次|最后|综上|总之|以下是|我将/,
+    /为了回复你|当前对话会交给 AI|普通聊天不会默认|长期记忆|账号记忆|授权记忆|档案|记录里/,
+    /你愿意(再)?告诉我|你愿意分享|能不能再说|方便说说|什么样的语气/,
+    /我无法|我不能|我没有能力|我是虚拟|我是程序/,
+    /核对资料|查资料|登录系统|标准答案|系统里/,
+  ];
+  roboticPatterns.forEach((pattern) => {
+    if (pattern.test(text)) flags.push(pattern.source);
+  });
+  if (text.length > 220 && !/[？?]/.test(userMessage)) flags.push("too_long");
+  if ((text.match(/[？?]/g) || []).length > 1) flags.push("too_many_questions");
+  if (/像机器人|不像人|好陌生|太冷|客服|模板|无趣|无聊/.test(userMessage) && /语气|反馈|告诉我|愿意/.test(text)) {
+    flags.push("asked_user_to_fix_tone");
+  }
+  return flags;
+}
+
+async function humanizeReply({ apiKey, userMessage, draftReply, displayName, safeMemories }) {
+  const flags = getHumanReviewFlags(draftReply, userMessage);
+  if (!flags.length) return draftReply;
+
+  const reviewSystem = [
+    "你是小暖的人味审稿层。你的工作不是回答用户新问题，而是把小暖的初稿改得更像一个认真在场的朋友。",
+    "只输出改写后的最终回复，不要解释你改了什么。",
+    "必须保留原意和事实边界：不能伪造记忆，不能说已长期记住未经用户确认的事，不能承诺永远陪伴，不能假装真人。",
+    "删掉客服腔、档案腔、系统说明腔、心理咨询报告腔。不要说'作为AI'、'长期记忆'、'授权记忆'、'档案'、'记录里'、'首先/其次'、'我理解你的感受'。",
+    "不要把责任推回用户。尤其用户嫌你不像人时，不要问'你想要什么语气'，要自己先换一种更贴近的说法。",
+    "回复 1-3 个短段落。像微信里一个温柔但有判断力的女孩子朋友：具体、自然、有一点自己的反应。",
+    displayName ? `用户称呼：${displayName}` : "不知道用户称呼时，不要装熟。",
+    safeMemories ? `可参考的授权记忆摘要：\n${safeMemories}` : "没有可参考的长期记忆时，不要装作记得具体旧事。",
+    `本次触发的人味问题：${flags.join("、")}`,
+  ].join("\n");
+
+  try {
+    const upstream = await requestQwen({
+      apiKey,
+      temperature: 0.72,
+      maxTokens: 220,
+      messages: [
+        { role: "system", content: reviewSystem },
+        { role: "user", content: `用户刚才说：${userMessage}\n\n小暖初稿：${draftReply}\n\n请改写成最终回复。` },
+      ],
+    });
+    if (!upstream.ok) return draftReply;
+    const data = await upstream.json();
+    const revised = data?.choices?.[0]?.message?.content?.trim();
+    if (!revised) return draftReply;
+    return getHumanReviewFlags(revised, userMessage).length < flags.length ? revised : draftReply;
+  } catch {
+    return draftReply;
+  }
 }
 
 export default async function handler(req, res) {
@@ -393,24 +429,13 @@ export default async function handler(req, res) {
     safeMemories ? `以下是用户明确允许你记住的事：\n${safeMemories}` : "目前没有用户确认保存的长期记忆。",
   ].join("\n");
 
-  const upstream = await fetch(`${BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: "system", content: system },
-        ...safeHistory,
-        { role: "user", content: message },
-      ],
-      temperature: 0.88,
-      presence_penalty: 0.25,
-      max_tokens: 240,
-      stream,
-    }),
+  const upstream = await requestQwen({
+    apiKey,
+    messages: [
+      { role: "system", content: system },
+      ...safeHistory,
+      { role: "user", content: message },
+    ],
   });
 
   if (!upstream.ok) {
@@ -419,12 +444,18 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (stream && upstream.body) {
-    await streamQwenToClient(upstream, res);
+  const data = await upstream.json();
+  const draftReply = data?.choices?.[0]?.message?.content || "我在，但刚才有点没接住。";
+  const reply = await humanizeReply({
+    apiKey,
+    userMessage: message,
+    draftReply,
+    displayName,
+    safeMemories,
+  });
+  if (stream) {
+    sendTextStream(res, reply);
     return;
   }
-
-  const data = await upstream.json();
-  const reply = data?.choices?.[0]?.message?.content || "我在，但刚才有点没接住。你愿意再说一遍吗？";
   res.status(200).json({ reply });
 }
