@@ -85,6 +85,15 @@ function findNameFromMemories(memories = []) {
   return identity ? extractPreferredName(identity.content || "") : "";
 }
 
+function findNameFromHistory(history = []) {
+  const userItems = history.filter((item) => item?.role === "user").reverse();
+  for (const item of userItems) {
+    const name = extractPreferredName(item.content || "");
+    if (name) return name;
+  }
+  return "";
+}
+
 function isClosenessRequest(text = "") {
   return /(抱抱|抱我|抱一下|抱着我|牵手|拉着我的手|陪我一下|陪我一会儿|陪陪我)/.test(text);
 }
@@ -101,12 +110,12 @@ function makeClosenessReply(text = "", name = "") {
 }
 
 function isIdentityCheck(text = "") {
-  return /(我是谁|你知道我是谁|你还记得我吗|你记得我吗|我的名字|我叫什么|你知道我叫什么)/.test(text);
+  return /(我是谁|你知道我是谁|你还记得我吗|你记得我吗|我的名字|我叫什么|你知道我叫什么|我告诉过你|我说过了|刚才说过|不是告诉你了吗)/.test(text);
 }
 
 function makeIdentityReply(name = "") {
   if (!name) {
-    return "我还没有稳稳记下你的名字。\n\n你愿意的话，可以告诉我一次；我会先问你要不要留下，再记进属于你的那本记录里。";
+    return "嗯，这次是我没接住，不该让你有那种“我明明说过了”的落空感。\n\n我现在这边还没有稳稳认出你的名字。你只要再丢给我一个名字就好，我会先在这次聊天里认住；要不要长期留下，再由你点头。";
   }
   return `${name}。\n\n我记得你。这不是一句标准答案，是我应该认出来的人。`;
 }
@@ -193,7 +202,8 @@ export default async function handler(req, res) {
     .map((item) => `- [${memoryTypeLabel[item.type] || "授权记忆"}] ${item.content}`)
     .join("\n");
   const memoryName = findNameFromMemories(memorySource);
-  const displayName = dbProfile?.nickname || profile?.name || memoryName;
+  const historyName = findNameFromHistory(safeHistory);
+  const displayName = dbProfile?.nickname || profile?.name || memoryName || historyName;
 
   if (isIdentityCheck(message)) {
     const reply = makeIdentityReply(displayName);

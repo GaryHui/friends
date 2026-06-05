@@ -1283,7 +1283,7 @@ function showMemoryLoginNotice() {
   localStorage.setItem("nuanyou-memory-login-notice", "1");
   addMessage(
     "friend",
-    "先轻轻提醒你一下：为了回复你，当前对话会交给 AI 处理；但我不会把普通聊天默认保存成账号记忆。只有你点头允许记下的事，才会同步到你的档案里。",
+    "我会陪你聊。普通聊天不会默认进长期记忆；只有你点头让我记下的事，才会放进你的档案。",
   );
 }
 
@@ -2581,6 +2581,19 @@ function rememberPreferredName(name) {
   saveProfileRemote();
 }
 
+function rememberPreferredNameForSession(name) {
+  if (!name) return;
+  state.profile = {
+    ...(state.profile || {}),
+    name,
+    metAt: state.profile?.metAt || new Date().toISOString(),
+  };
+  topEyebrowEl.textContent = `欢迎你，${name}`;
+  appShellEl.classList.remove("intro-mode");
+  persist();
+  ensureCompanionFirstMeet();
+}
+
 function repairProfileFromSavedMemories() {
   if (state.profile?.name) return;
   const memory = state.memories.find((item) => item?.content && extractPreferredName(item.content));
@@ -2630,7 +2643,7 @@ function getKnownPreferredName() {
 }
 
 function isAskingKnownIdentity(text) {
-  return /(你知道我是谁|你还记得我吗|你记得我吗|我是谁|我的名字|我叫什么|你知道我叫什么)/.test(text);
+  return /(你知道我是谁|你还记得我吗|你记得我吗|我是谁|我的名字|我叫什么|你知道我叫什么|我告诉过你|我说过了|刚才说过|不是告诉你了吗)/.test(text);
 }
 
 function isCriticizingTone(text) {
@@ -3079,6 +3092,9 @@ document.querySelector("#chat-form").addEventListener("submit", (event) => {
   }
   const forgetMatches = findMemoriesToForget(text);
   const memoryCandidate = detectMemoryCandidate(text);
+  if (memoryCandidate?.type === "identity" && memoryCandidate.name) {
+    rememberPreferredNameForSession(memoryCandidate.name);
+  }
   const knownName = getKnownPreferredName();
   const knownMemoryAnswer = makeKnownMemoryAnswer(text);
 
